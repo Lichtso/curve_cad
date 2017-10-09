@@ -49,6 +49,84 @@ def bezierTangentAt(points, t):
     return s*s*(points[1]-points[0])+2*s*t*(points[2]-points[1])+t*t*(points[3]-points[2])
     # return s*s*points[0] + (s*s-2*s*t)*points[1] + (2*s*t-t*t)*points[2] + t*t*points[3]
 
+def bezierSliceFromTo(points, minParam, maxParam):
+    fromP = bezierPointAt(points, minParam)
+    fromT = bezierTangentAt(points, minParam)
+    toP = bezierPointAt(points, maxParam)
+    toT = bezierTangentAt(points, maxParam)
+    paramDiff = maxParam-minParam
+    return [fromP, fromP+fromT*paramDiff, toP-toT*paramDiff, toP]
+
+def bezierIntersectionBroadPhase(solutions, depth, pointsA, pointsB, aMin, aMax, bMin, bMax, tollerance=0.001):
+    if aabbIntersectionTest(aabbOfPoints(bezierSliceFromTo(pointsA, aMin, aMax)), aabbOfPoints(bezierSliceFromTo(pointsB, bMin, bMax)), tollerance) == False:
+        return
+    if depth == 0:
+        solutions.append([aMin, aMax, bMin, bMax])
+        return
+    depth -= 1
+    aMid = (aMin+aMax)*0.5
+    bMid = (bMin+bMax)*0.5
+    bezierIntersectionBroadPhase(solutions, depth, pointsA, pointsB, aMin, aMid, bMin, bMid)
+    bezierIntersectionBroadPhase(solutions, depth, pointsA, pointsB, aMin, aMid, bMid, bMax)
+    bezierIntersectionBroadPhase(solutions, depth, pointsA, pointsB, aMid, aMax, bMin, bMid)
+    bezierIntersectionBroadPhase(solutions, depth, pointsA, pointsB, aMid, aMax, bMid, bMax)
+
+def bezierIntersectionNarrowPhase(broadPhase, pointsA, pointsB, tollerance=0.000001):
+    aMin = broadPhase[0]
+    aMax = broadPhase[1]
+    bMin = broadPhase[2]
+    bMax = broadPhase[3]
+    while (aMax-aMin > tollerance) or (bMax-bMin > tollerance):
+        aMid = (aMin+aMax)*0.5
+        bMid = (bMin+bMax)*0.5
+        a1 = bezierPointAt(pointsA, (aMin+aMid)*0.5)
+        a2 = bezierPointAt(pointsA, (aMid+aMax)*0.5)
+        b1 = bezierPointAt(pointsB, (bMin+bMid)*0.5)
+        b2 = bezierPointAt(pointsB, (bMid+bMax)*0.5)
+        a1b1Dist = (a1-b1).length
+        a2b1Dist = (a2-b1).length
+        a1b2Dist = (a1-b2).length
+        a2b2Dist = (a2-b2).length
+        minDist = min(a1b1Dist, a2b1Dist, a1b2Dist, a2b2Dist)
+        if a1b1Dist == minDist:
+            aMax = aMid
+            bMax = bMid
+        elif a2b1Dist == minDist:
+            aMin = aMid
+            bMax = bMid
+        elif a1b2Dist == minDist:
+            aMax = aMid
+            bMin = bMid
+        else:
+            aMin = aMid
+            bMin = bMid
+    return [aMin, bMin, minDist]
+
+def bezierIntersection(pointsA, pointsB, paramsA, paramsB, tollerance=0.001):
+    solutions = []
+    bezierIntersectionBroadPhase(solutions, 8, pointsA, pointsB, 0.0, 1.0, 0.0, 1.0)
+    for index in range(0, len(solutions)):
+        solutions[index] = bezierIntersectionNarrowPhase(solutions[index], pointsA, pointsB)
+    for index in range(0, len(solutions)):
+        for otherIndex in range(0, len(solutions)):
+            if solutions[index][2] == float('inf'):
+                break
+            if index == otherIndex or solutions[otherIndex][2] == float('inf'):
+                continue
+            diffA = solutions[index][0]-solutions[otherIndex][0]
+            diffB = solutions[index][1]-solutions[otherIndex][1]
+            if diffA*diffA+diffB*diffB < 0.01:
+                if solutions[index][2] < solutions[otherIndex][2]:
+                    solutions[otherIndex][2] = float('inf')
+                else:
+                    solutions[index][2] = float('inf')
+    for solution in solutions:
+        if solution[2] < tollerance:
+            paramsA.append(solution[0])
+            paramsB.append(solution[1])
+    paramsA.sort()
+    paramsB.sort()
+
 def bezierSubivideAt(points, params):
     if len(params) == 0:
         return []

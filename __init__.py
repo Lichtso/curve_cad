@@ -54,7 +54,29 @@ class BezierSubdivide(bpy.types.Operator):
         internal.subdivideBezierSegmentsAtParams(segments)
         return {'FINISHED'}
 
-operators = [BezierSubdivide]
+class BezierIntersection(bpy.types.Operator):
+    bl_idname = 'curve.bezier_intersection'
+    bl_description = bl_label = 'Bezier Intersection'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
+        if len(segments) != 2:
+            self.report({'WARNING'}, 'Invalid selection')
+            return {'CANCELLED'}
+
+        def removeAdjacentIntersections(segmentA, segmentB, threshold=0.0001):
+            if segmentA.endIndex == segmentB.beginIndex:
+                segmentA.params[:] = [param for param in segmentA.params if param < 1-threshold]
+                segmentB.params[:] = [param for param in segmentB.params if param > threshold]
+
+        internal.bezierIntersection(segments[0].points, segments[1].points, segments[0].params, segments[1].params)
+        removeAdjacentIntersections(segments[0], segments[1])
+        removeAdjacentIntersections(segments[1], segments[0])
+        internal.subdivideBezierSegmentsAtParams(segments)
+        return {'FINISHED'}
+
+operators = [BezierSubdivide, BezierIntersection]
 
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
     bl_label = 'CurveCAD'
