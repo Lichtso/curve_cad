@@ -76,7 +76,26 @@ class BezierIntersection(bpy.types.Operator):
         internal.subdivideBezierSegmentsAtParams(segments)
         return {'FINISHED'}
 
-operators = [BezierSubdivide, BezierIntersection]
+class BezierCircle(bpy.types.Operator):
+    bl_idname = 'curve.bezier_circle'
+    bl_description = bl_label = 'Bezier Circle'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
+        if len(segments) != 1:
+            self.report({'WARNING'}, 'Invalid selection')
+            return {'CANCELLED'}
+
+        points = segments[0].points
+        circle = internal.circleOfTriangle(points[0], internal.bezierPointAt(points, 0.5), points[3])
+        if circle == None:
+            return {'CANCELLED'}
+
+        bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
+        return {'FINISHED'}
+
+operators = [BezierSubdivide, BezierIntersection, BezierCircle]
 
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
     bl_label = 'CurveCAD'

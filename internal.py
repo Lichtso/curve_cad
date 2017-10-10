@@ -22,6 +22,29 @@ from collections import namedtuple
 
 SplineBezierSegement = namedtuple('SplineBezierSegement', 'spline points beginIndex endIndex beginPoint endPoint params')
 AABB = namedtuple('AxisAlignedBoundingBox', 'center dimensions')
+Plane = namedtuple('Plane', 'normal distance')
+Circle = namedtuple('Circle', 'plane center radius')
+
+def circleOfTriangle(a, b, c):
+    # https://en.wikipedia.org/wiki/Circumscribed_circle#Cartesian_coordinates_from_cross-_and_dot-products
+    dirBA = a-b
+    dirCB = b-c
+    dirAC = c-a
+    normal = dirBA.cross(dirCB)
+    lengthBA = dirBA.length
+    lengthCB = dirCB.length
+    lengthAC = dirAC.length
+    lengthN = normal.length
+    if lengthN == 0:
+        return None
+    factor = -1/(2*lengthN*lengthN)
+    alpha = (dirBA*dirAC)*(lengthCB*lengthCB*factor)
+    beta = (dirBA*dirCB)*(lengthAC*lengthAC*factor)
+    gamma = (dirAC*dirCB)*(lengthBA*lengthBA*factor)
+    center = a*alpha+b*beta+c*gamma
+    radius = (lengthBA*lengthCB*lengthAC)/(2*lengthN)
+    plane = Plane(normal=normal/lengthN, distance=center*normal)
+    return Circle(plane=plane, center=center, radius=radius)
 
 def aabbOfPoints(points):
     min = Vector(points[0])
