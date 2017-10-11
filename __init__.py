@@ -95,7 +95,23 @@ class BezierCircle(bpy.types.Operator):
         bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
         return {'FINISHED'}
 
-operators = [BezierSubdivide, BezierIntersection, BezierCircle]
+class BezierLength(bpy.types.Operator):
+    bl_idname = 'curve.bezier_length'
+    bl_description = bl_label = 'Bezier Length'
+
+    def execute(self, context):
+        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
+        if len(segments) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+
+        length = 0
+        for segment in segments:
+            length += internal.bezierLength(segment.points)
+        self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
+        return {'FINISHED'}
+
+operators = [BezierSubdivide, BezierIntersection, BezierCircle, BezierLength]
 
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
     bl_label = 'CurveCAD'

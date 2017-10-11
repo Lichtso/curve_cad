@@ -72,6 +72,28 @@ def bezierTangentAt(points, t):
     return s*s*(points[1]-points[0])+2*s*t*(points[2]-points[1])+t*t*(points[3]-points[2])
     # return s*s*points[0] + (s*s-2*s*t)*points[1] + (2*s*t-t*t)*points[2] + t*t*points[3]
 
+def bezierLength(points, beginT=0, endT=1, samples=1024):
+    # https://en.wikipedia.org/wiki/Arc_length#Finding_arc_lengths_by_integrating
+    vec = [points[1]-points[0], points[2]-points[1], points[3]-points[2]]
+    dot = [vec[0]*vec[0], vec[0]*vec[1], vec[0]*vec[2], vec[1]*vec[1], vec[1]*vec[2], vec[2]*vec[2]]
+    factors = [
+        dot[0],
+        4*(dot[1]-dot[0]),
+        6*dot[0]+4*dot[3]+2*dot[2]-12*dot[1],
+        12*dot[1]+4*(dot[4]-dot[0]-dot[2])-8*dot[3],
+        dot[0]+dot[5]+2*dot[2]+4*(dot[3]-dot[1]-dot[4])
+    ]
+    # https://en.wikipedia.org/wiki/Trapezoidal_rule
+    length = 0
+    prev_value = math.sqrt(factors[4]+factors[3]+factors[2]+factors[1]+factors[0])
+    for index in range(0, samples+1):
+        t = beginT+(endT-beginT)*index/samples
+        # value = math.sqrt(factors[4]*(t**4)+factors[3]*(t**3)+factors[2]*(t**2)+factors[1]*t+factors[0])
+        value = math.sqrt((((factors[4]*t+factors[3])*t+factors[2])*t+factors[1])*t+factors[0])
+        length += (prev_value+value)*0.5
+        prev_value = value
+    return length*3/samples
+
 def bezierSliceFromTo(points, minParam, maxParam):
     fromP = bezierPointAt(points, minParam)
     fromT = bezierTangentAt(points, minParam)
