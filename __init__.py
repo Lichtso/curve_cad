@@ -16,7 +16,7 @@
 #
 #  ***** GPL LICENSE BLOCK *****
 
-import os, bpy, importlib
+import os, bpy, importlib, math
 if 'internal' in locals():
     importlib.reload(internal)
 from . import internal
@@ -111,10 +111,37 @@ class BezierLength(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [BezierSubdivide, BezierIntersection, BezierCircle, BezierLength]
+class BezierOffset(bpy.types.Operator):
+    bl_idname = 'curve.bezier_offset'
+    bl_description = bl_label = 'Bezier Offset'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    offset = bpy.props.FloatProperty(name='Offset', unit='LENGTH', default=0.1)
+    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
+    maxAngle = bpy.props.FloatProperty(name='Angle', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    count = bpy.props.IntProperty(name='Count', min=1, default=1)
+
+    def execute(self, context):
+        splines = 0
+        for spline in bpy.context.object.data.splines:
+            selected = (spline.type == 'BEZIER')
+            for index, point in enumerate(spline.bezier_points):
+                if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
+                    selected = False
+                    break
+            if selected:
+                splines += 1
+                for index in range(0, self.count):
+                    internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.maxAngle)
+        if splines == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
+operators = [BezierSubdivide, BezierIntersection, BezierCircle, BezierLength, BezierOffset]
 
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
-    bl_label = 'CurveCAD'
+    bl_label = bl_info['name']
 
     @classmethod
     def poll(cls, context):

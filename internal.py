@@ -25,6 +25,28 @@ AABB = namedtuple('AxisAlignedBoundingBox', 'center dimensions')
 Plane = namedtuple('Plane', 'normal distance')
 Circle = namedtuple('Circle', 'plane center radius')
 
+def nearestPointOfLines(originA, dirA, originB, dirB, tollerance=0.0):
+    # https://en.wikipedia.org/wiki/Skew_lines#Nearest_Points
+    normal = dirA.cross(dirB)
+    normalA = dirA.cross(normal)
+    normalB = dirB.cross(normal)
+    divisorA = dirA*normalB
+    divisorB = dirB*normalA
+    if abs(divisorA) <= tollerance or abs(divisorB) <= tollerance:
+        return (float('nan'), float('nan'), originA, originB)
+    else:
+        paramA = (originB-originA)*normalB/divisorA
+        paramB = (originA-originB)*normalA/divisorB
+        return (paramA, paramB, originA+dirA*paramA, originB+dirB*paramB)
+
+def lineIntersection(beginA, endA, beginB, endB):
+    dirA = endA-beginA
+    dirB = endB-beginB
+    intersection = nearestPointOfLines(beginA, dirA, beginB, dirB)
+    if intersection[0] != intersection[0] or intersection[0] < 0 or intersection[0] > 1 or intersection[1] < 0 or intersection[1] > 1:
+        return None
+    return (intersection[2]+intersection[3])*0.5
+
 def circleOfTriangle(a, b, c):
     # https://en.wikipedia.org/wiki/Circumscribed_circle#Cartesian_coordinates_from_cross-_and_dot-products
     dirBA = a-b
@@ -272,3 +294,80 @@ def bezierSegments(splines, selection_only):
                                 points=[Vector(prev.co), Vector(prev.handle_right), Vector(next.handle_left), Vector(next.co)],
                                 params=[]))
     return segments
+
+def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
+    corners = []
+    vertices = []
+    cyclic = spline.use_cyclic_u
+    segments = bezierSegments([spline], False)
+    if len(segments) == 0:
+        return None
+
+    def add_vertex_for(points, param):
+        position = bezierPointAt(points, param)
+        tangent = bezierTangentAt(points, param)
+        tangent.normalize()
+        normal = Vector((-tangent.y, tangent.x, 0))
+        vertices.append(position+normal*distance)
+
+    for index, segment in enumerate(segments):
+        corner = segment.points[0]
+        begin_tangent = bezierTangentAt(segments[index-1].points, 1).normalized()
+        end_tangent = bezierTangentAt(segment.points, 0).normalized()
+        angle = begin_tangent*end_tangent
+        angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
+        place_vertex = angle != 0 or (not cyclic and index == 0)
+
+        if angle != 0 and (cyclic or index > 0):
+            begin_normal = Vector((-begin_tangent.y, begin_tangent.x, 0))
+            end_normal = Vector((-end_tangent.y, end_tangent.x, 0))
+            begin_point = corner+begin_normal*distance
+            end_point = corner+end_normal*distance
+            normal = begin_normal.cross(end_normal)
+            circle_samples = math.ceil(angle/max_angle)
+            angle = math.copysign(angle, normal[2])
+            beginAngle = math.atan2(begin_normal[1], begin_normal[0])
+            intersection = nearestPointOfLines(begin_point, begin_tangent, end_point, end_tangent)
+            if intersection[0] > 0: # and intersection[1] < 0:
+                for t in range(1, circle_samples):
+                    t = beginAngle+angle*t/circle_samples
+                    normal = Vector((math.cos(t), math.sin(t), 0))
+                    vertices.append(corner+normal*distance)
+
+        if place_vertex:
+            add_vertex_for(segment.points, 0)
+        if segment.beginPoint.handle_right_type == 'VECTOR' and segment.endPoint.handle_left_type == 'VECTOR':
+            add_vertex_for(segment.points, 1)
+        else:
+            prev_tangent = bezierTangentAt(segment.points, 0).normalized()
+            for t in range(1, bezier_samples+1):
+                t /= bezier_samples
+                tangent = bezierTangentAt(segment.points, t).normalized()
+                if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= max_angle:
+                    add_vertex_for(segment.points, t)
+                    prev_tangent = tangent
+
+    i = 0
+    while i < len(vertices):
+        j = i+2
+        while j < (len(vertices) - (0 if i > 0 else 1)):
+            intersection = lineIntersection(vertices[i-1], vertices[i], vertices[j-1], vertices[j])
+            if intersection == None:
+                j += 1
+                continue
+            if j-i < len(vertices)/2:
+                vertices = vertices[:i] + [intersection] + vertices[j:]
+                j = i+2
+            else:
+                vertices = vertices[i:j] + [intersection]
+                j = 0
+        i += 1
+
+    spline = bpy.context.object.data.splines.new(type='POLY')
+    spline.use_cyclic_u = cyclic
+    spline.points.add(count=len(vertices)-1)
+    for index, vertex in enumerate(vertices):
+        point = spline.points[index]
+        point.select = True
+        point.co.xyz = vertex
+    return spline
