@@ -116,6 +116,61 @@ def bezierLength(points, beginT=0, endT=1, samples=1024):
         prev_value = value
     return length*3/samples
 
+# https://en.wikipedia.org/wiki/Root_of_unity
+# cubic_roots_of_unity = [cmath.rect(1, i/3*2*math.pi) for i in range(0, 3)]
+cubic_roots_of_unity = [complex(1, 0), complex(-1, math.sqrt(3))*0.5, complex(-1, -math.sqrt(3))*0.5]
+def bezierRoots(dists, tollerance=0.0001):
+    # https://en.wikipedia.org/wiki/Cubic_function#Lagrange.27s_method
+    a  = 3*(dists[1]-dists[2])+dists[3]-dists[0]
+    E1 = 3*(dists[2]-2*dists[1]+dists[0])
+    E2 = a*3*(dists[1]-dists[0])
+    E3 = a*a*dists[0]
+    A  = (2*E1*E1-9*E2)*E1+27*E3
+    B  = E1*E1-3*E2
+    b  = ((A+cmath.sqrt(A*A-4*B*B*B))*0.5) ** (1/3)
+    if abs(a) > tollerance and abs(b) > tollerance:
+        roots = []
+        for root in cubic_roots_of_unity:
+            root *= b
+            root = -1/(3*a)*(E1+root+B/root)
+            if abs(root.imag) < tollerance and root.real >= 0.0 and root.real <= 1.0:
+                roots.append(root.real)
+        return roots
+    elif abs(dists[3]-dists[0]) > tollerance: # Not parallel
+        root = -dists[0]/(dists[3]-dists[0])
+        return [root] if root >= 0.0 and root <= 1.0 else []
+    else: # Parallel
+        return [0.5] if abs(dists[0]) < tollerance else []
+
+def isPointInSpline(spline, point):
+    if not spline.use_cyclic_u:
+        return False
+    count = 0
+
+    if spline.type == 'BEZIER':
+        for index, next in enumerate(spline.bezier_points):
+            prev = spline.bezier_points[index-1]
+            points = (prev.co, prev.handle_right, next.handle_left, next.co)
+            roots = bezierRoots((points[0][1]-point[1], points[1][1]-point[1], points[2][1]-point[1], points[3][1]-point[1]))
+            for root in roots:
+                if point[0] <= bezierPointAt(points, root)[0]:
+                    count += 1
+
+    elif spline.type == 'POLY':
+        for index, next in enumerate(spline.points):
+            points = (spline.points[index-1].co, next.co)
+            if (points[0][0] < point[0] and points[1][0] < point[0]) or \
+               (points[0][1] < point[1] and points[1][1] < point[1]) or \
+               (points[0][1] > point[1] and points[1][1] > point[1]):
+                continue
+            diff = points[1]-points[0]
+            if diff[1] == 0:
+                count += 1 if points[0][0] == point[0] else 0
+            else:
+                count += 1 if (point[0] <= points[0][0]+diff[0]/diff[1]*(point[1]-points[0][1])) else 0
+
+    return count%2 == 1
+
 def bezierSliceFromTo(points, minParam, maxParam):
     fromP = bezierPointAt(points, minParam)
     fromT = bezierTangentAt(points, minParam)
