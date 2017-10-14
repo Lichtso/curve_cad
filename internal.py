@@ -339,7 +339,7 @@ def bezierSegments(splines, selection_only):
             if index == 0 and not spline.use_cyclic_u:
                 continue
             prev = spline.bezier_points[index-1]
-            if not selection_only or prev.select_right_handle or next.select_left_handle:
+            if not selection_only or (prev.select_right_handle and next.select_left_handle):
                 segments.append(SplineBezierSegement(
                                 spline=spline,
                                 beginIndex=index-1 if index > 0 else len(spline.bezier_points)-1,
