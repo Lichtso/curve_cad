@@ -402,7 +402,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
                     add_vertex_for(segment.points, t)
                     prev_tangent = tangent
 
-    i = 0
+    i = (0 if cyclic else 1)
     while i < len(vertices):
         j = i+2
         while j < (len(vertices) - (0 if i > 0 else 1)):
@@ -415,7 +415,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
                 j = i+2
             else:
                 vertices = vertices[i:j] + [intersection]
-                j = 0
+                j = (0 if cyclic else 1)
         i += 1
 
     spline = bpy.context.object.data.splines.new(type='POLY')
