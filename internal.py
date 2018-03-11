@@ -426,3 +426,46 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
         point.select = True
         point.co.xyz = vertex
     return spline
+
+def mergeBezierEndPoints(splines):
+    points = []
+    selected_splines = []
+    is_last_point = []
+    for spline in splines:
+        if spline.type != 'BEZIER' or spline.use_cyclic_u:
+            continue
+        if spline.bezier_points[0].select_control_point:
+            points.append(spline.bezier_points[0])
+            selected_splines.append(spline)
+            is_last_point.append(False)
+        if spline.bezier_points[-1].select_control_point:
+            points.append(spline.bezier_points[-1])
+            selected_splines.append(spline)
+            is_last_point.append(True)
+
+    if len(points) != 2:
+        return False
+
+    points[0].handle_left_type = 'FREE'
+    points[0].handle_right_type = 'FREE'
+    new_co = (points[0].co+points[1].co)*0.5
+
+    handle = (points[1].handle_left if is_last_point[1] else points[1].handle_right)+new_co-points[1].co
+    if is_last_point[0]:
+        points[0].handle_left += new_co-points[0].co
+        points[0].handle_right = handle
+    else:
+        points[0].handle_right += new_co-points[0].co
+        points[0].handle_left = handle
+    points[0].co = new_co
+
+    bpy.ops.curve.select_all(action='DESELECT')
+    points[1].select_control_point = True
+    bpy.ops.curve.delete()
+    points[0].select_control_point = True
+    points[1] = selected_splines[1].bezier_points[-1 if is_last_point[1] else 0]
+    points[1].select_control_point = True
+    bpy.ops.curve.make_segment()
+    bpy.ops.curve.select_all(action='DESELECT')
+
+    return True

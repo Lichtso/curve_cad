@@ -139,7 +139,18 @@ class BezierOffset(bpy.types.Operator):
             return {'CANCELLED'}
         return {'FINISHED'}
 
-operators = [BezierSubdivide, BezierIntersection, BezierCircle, BezierLength, BezierOffset]
+class BezierMergeEnds(bpy.types.Operator):
+    bl_idname = 'curve.bezier_merge_ends'
+    bl_description = bl_label = 'Bezier Merge Ends'
+
+    def execute(self, context):
+        if not internal.mergeBezierEndPoints(bpy.context.object.data.splines):
+            self.report({'WARNING'}, 'Invalid selection')
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+operators = [BezierIntersection, BezierMergeEnds, BezierSubdivide, BezierOffset, BezierCircle, BezierLength]
 
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
     bl_label = bl_info['name']

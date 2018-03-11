@@ -3,12 +3,18 @@
 
 ## Edit Operators
 
+### Bezier Intersection
+Select exactly two segments to split them at their intersections.
+
+### Bezier Merge Ends
+Merges two end control points into one while preserving the relative positions of their handles.
+
 ### Bezier Subdivide
 Blender only allows for uniform subdivision.
 This operator enables you to select multiple segments and split them at custom parameters simultaneously.
 
-### Bezier Intersection
-Select exactly two segments to split them at their intersections.
+### Bezier Offset
+Adds poly traces with a defined offset to the selected bezier spline (all connected segments).
 
 ### Bezier Circle
 Add a bezier circle which completes the selected segment into a full circle.
@@ -16,8 +22,6 @@ Add a bezier circle which completes the selected segment into a full circle.
 ### Bezier Length
 Measures the arc length of the selected bezier segments.
 
-### Bezier Offset
-Adds poly traces with a defined offset to the selected bezier spline (all connected segments).
 
 
 ## Export Operator
