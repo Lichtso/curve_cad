@@ -6,7 +6,7 @@
 ## Edit Operators
 
 ### Bezier Intersection
-Select exactly two segments to split them at their intersections.
+Select at least two segments to split them at their intersections.
 
 ### Bezier Merge Ends
 Merges two end control points into one while preserving the relative positions of their handles.

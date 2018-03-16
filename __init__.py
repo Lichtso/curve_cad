@@ -51,7 +51,7 @@ class BezierSubdivide(bpy.types.Operator):
             params.append(max(0.0, min(float(param), 1.0)))
         params.sort()
         for segment in segments:
-            segment.params.extend(params)
+            segment['params'].extend(params)
         internal.subdivideBezierSegmentsAtParams(segments)
         return {'FINISHED'}
 
@@ -62,19 +62,11 @@ class BezierIntersection(bpy.types.Operator):
 
     def execute(self, context):
         segments = internal.bezierSegments(bpy.context.object.data.splines, True)
-        if len(segments) != 2:
+        if len(segments) < 2:
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        def removeAdjacentIntersections(segmentA, segmentB, threshold=0.0001):
-            if segmentA.endIndex == segmentB.beginIndex:
-                segmentA.params[:] = [param for param in segmentA.params if param < 1-threshold]
-                segmentB.params[:] = [param for param in segmentB.params if param > threshold]
-
-        internal.bezierIntersection(segments[0].points, segments[1].points, segments[0].params, segments[1].params)
-        removeAdjacentIntersections(segments[0], segments[1])
-        removeAdjacentIntersections(segments[1], segments[0])
-        internal.subdivideBezierSegmentsAtParams(segments)
+        internal.bezierMultiIntersection(segments)
         return {'FINISHED'}
 
 class BezierCircle(bpy.types.Operator):
@@ -88,7 +80,7 @@ class BezierCircle(bpy.types.Operator):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        points = segments[0].points
+        points = segments[0]['points']
         circle = internal.circleOfTriangle(points[0], internal.bezierPointAt(points, 0.5), points[3])
         if circle == None:
             return {'CANCELLED'}
@@ -108,7 +100,7 @@ class BezierLength(bpy.types.Operator):
 
         length = 0
         for segment in segments:
-            length += internal.bezierLength(segment.points)
+            length += internal.bezierLength(segment['points'])
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
@@ -123,31 +115,24 @@ class BezierOffset(bpy.types.Operator):
     count = bpy.props.IntProperty(name='Count', min=1, default=1)
 
     def execute(self, context):
-        splines = 0
-        for spline in bpy.context.object.data.splines:
-            selected = (spline.type == 'BEZIER')
-            for index, point in enumerate(spline.bezier_points):
-                if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
-                    selected = False
-                    break
-            if selected:
-                splines += 1
-                for index in range(0, self.count):
-                    internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.maxAngle)
-        if splines == 0:
+        splines = internal.bezierSelectedSplines(bpy.context.object.data.splines)
+        if len(splines) == 0:
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}
+        for spline in splines:
+            for index in range(0, self.count):
+                internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.maxAngle)
         return {'FINISHED'}
 
 class BezierMergeEnds(bpy.types.Operator):
     bl_idname = 'curve.bezier_merge_ends'
     bl_description = bl_label = 'Bezier Merge Ends'
+    bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         if not internal.mergeBezierEndPoints(bpy.context.object.data.splines):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
-
         return {'FINISHED'}
 
 operators = [BezierIntersection, BezierMergeEnds, BezierSubdivide, BezierOffset, BezierCircle, BezierLength]
