@@ -46,12 +46,11 @@ class BezierSubdivide(bpy.types.Operator):
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}
 
-        params = []
+        cuts = []
         for param in self.params.split(' '):
-            params.append(max(0.0, min(float(param), 1.0)))
-        params.sort()
+            cuts.append({'param': max(0.0, min(float(param), 1.0))})
         for segment in segments:
-            segment['params'].extend(params)
+            segment['cuts'].extend(cuts)
         internal.subdivideBezierSegmentsAtParams(segments)
         return {'FINISHED'}
 

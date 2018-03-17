@@ -119,19 +119,22 @@ def bezierLength(points, beginT=0, endT=1, samples=1024):
 # cubic_roots_of_unity = [cmath.rect(1, i/3*2*math.pi) for i in range(0, 3)]
 cubic_roots_of_unity = [complex(1, 0), complex(-1, math.sqrt(3))*0.5, complex(-1, -math.sqrt(3))*0.5]
 def bezierRoots(dists, tollerance=0.0001):
-    # https://en.wikipedia.org/wiki/Cubic_function#Lagrange.27s_method
-    a  = 3*(dists[1]-dists[2])+dists[3]-dists[0]
-    E1 = 3*(dists[2]-2*dists[1]+dists[0])
-    E2 = a*3*(dists[1]-dists[0])
-    E3 = a*a*dists[0]
-    A  = (2*E1*E1-9*E2)*E1+27*E3
-    B  = E1*E1-3*E2
-    b  = ((A+cmath.sqrt(A*A-4*B*B*B))*0.5) ** (1/3)
-    if abs(a) > tollerance and abs(b) > tollerance:
+    # https://en.wikipedia.org/wiki/Cubic_function
+    # y(t) = a*t^3 +b*t^2 +c*t^1 +d*t^0
+    a = 3*(dists[1]-dists[2])+dists[3]-dists[0]
+    b = 3*(dists[0]-2*dists[1]+dists[2])
+    c = 3*(dists[1]-dists[0])
+    d = dists[0]
+    if abs(a) != 0: # Cubic
+        E2 = a*c
+        E3 = a*a*d
+        A = (2*b*b-9*E2)*b+27*E3
+        B = b*b-3*E2
+        C = ((A+cmath.sqrt(A*A-4*B*B*B))*0.5) ** (1/3)
         roots = []
         for root in cubic_roots_of_unity:
-            root *= b
-            root = -1/(3*a)*(E1+root+B/root)
+            root *= C
+            root = -1/(3*a)*(b+root+B/root)
             if abs(root.imag) < tollerance and root.real > -tollerance and root.real < 1.0+tollerance:
                 roots.append(max(0.0, min(root.real, 1.0)))
         # Remove doubles
@@ -140,11 +143,17 @@ def bezierRoots(dists, tollerance=0.0001):
             if abs(roots[index-1]-roots[index]) < tollerance:
                 roots.pop(index)
         return roots
-    elif abs(dists[3]-dists[0]) > tollerance: # Not parallel
-        root = -dists[0]/(dists[3]-dists[0])
+    elif abs(b) != 0: # Quadratic
+        disc = c*c -4*b*d
+        if disc < 0:
+            return []
+        disc = sqrt(disc)
+        return [(-c-disc)/(2*b), (-c+disc)/(2*b)]
+    elif abs(c) != 0: # Linear
+        root = -d/c
         return [root] if root >= 0.0 and root <= 1.0 else []
-    else: # Parallel
-        return [0.5] if abs(dists[0]) < tollerance else []
+    else: # Constant / Parallel
+        return []
 
 def xRaySplineIntersectionTest(spline, origin):
     intersections = []
@@ -274,9 +283,13 @@ def bezierIntersection(segmentA, segmentB, tollerance=0.001):
           (areIntersectionsAdjacent(segmentA, segmentB, solution[0], solution[1]) or \
            areIntersectionsAdjacent(segmentB, segmentA, solution[1], solution[0]))):
             continue
-        segmentA['params'].append(solution[0])
-        segmentB['params'].append(solution[1])
-        result.append([segmentA, segmentB, solution[0], solution[1]])
+        cutA = {'param': solution[0], 'segment': segmentA, 'otherSegment': segmentB}
+        cutB = {'param': solution[1], 'segment': segmentB, 'otherSegment': segmentA}
+        cutA['otherCut'] = cutB
+        cutB['otherCut'] = cutA
+        segmentA['cuts'].append(cutA)
+        segmentB['cuts'].append(cutB)
+        result.append([cutA, cutB])
     return result
 
 def bezierMultiIntersection(segments):
@@ -312,11 +325,11 @@ def bezierSubivideAt(points, params):
 
 def subdivideBezierSegmentAtParams(segment):
     # Blender only allows uniform subdivision. Use this method to subdivide at arbitrary params.
-    if len(segment['params']) == 0:
+    if len(segment['cuts']) == 0:
         return
-    segment['params'].sort()
+    segment['cuts'].sort(key=(lambda cut: cut['param']))
 
-    newPoints = bezierSubivideAt(segment['points'], segment['params'])
+    newPoints = bezierSubivideAt(segment['points'], list(map(lambda cut: cut['param'], segment['cuts'])))
     bpy.ops.curve.select_all(action='DESELECT')
     segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
     segment['beginPoint'].select_right_handle = True
@@ -327,9 +340,9 @@ def subdivideBezierSegmentAtParams(segment):
     segment['endPoint'].handle_left_type = 'FREE'
     segment['endPoint'].handle_right_type = 'FREE'
 
-    bpy.ops.curve.subdivide(number_cuts=len(segment['params']))
+    bpy.ops.curve.subdivide(number_cuts=len(segment['cuts']))
     if segment['endIndex'] > 0:
-        segment['endIndex'] += len(segment['params'])
+        segment['endIndex'] += len(segment['cuts'])
     segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
     segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
 
@@ -338,8 +351,9 @@ def subdivideBezierSegmentAtParams(segment):
     segment['endPoint'].select_left_handle = False
     segment['endPoint'].handle_left = newPoints[-1]
 
-    for index in range(0, len(segment['params'])):
-        newPoint = segment['spline'].bezier_points[segment['beginIndex']+1+index]
+    for index, cut in enumerate(segment['cuts']):
+        cut['index'] = segment['beginIndex']+1+index
+        newPoint = segment['spline'].bezier_points[cut['index']]
         newPoint.handle_left_type = 'FREE'
         newPoint.handle_right_type = 'FREE'
         newPoint.select_left_handle = False
@@ -365,7 +379,7 @@ def subdivideBezierSegmentsAtParams(segments):
             segment['beginIndex'] += indexOffset
             if segment['endIndex'] > 0:
                 segment['endIndex'] += indexOffset
-            indexOffset += len(segment['params'])
+            indexOffset += len(segment['cuts'])
             subdivideBezierSegmentAtParams(segment)
         for segment in group:
             segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
@@ -376,19 +390,19 @@ def bezierSegments(splines, selection_only):
     for spline in splines:
         if spline.type != 'BEZIER':
             continue
-        for index, next in enumerate(spline.bezier_points):
-            if index == 0 and not spline.use_cyclic_u:
+        for index, current in enumerate(spline.bezier_points):
+            next = spline.bezier_points[(index+1) % len(spline.bezier_points)]
+            if next == spline.bezier_points[0] and not spline.use_cyclic_u:
                 continue
-            prev = spline.bezier_points[index-1]
-            if not selection_only or (prev.select_right_handle and next.select_left_handle):
+            if not selection_only or (current.select_right_handle and next.select_left_handle):
                 segments.append({
                     'spline': spline,
-                    'beginIndex': index-1 if index > 0 else len(spline.bezier_points)-1,
-                    'endIndex': index,
-                    'beginPoint': prev,
+                    'beginIndex': index,
+                    'endIndex': index+1 if index < len(spline.bezier_points)-1 else 0,
+                    'beginPoint': current,
                     'endPoint': next,
-                    'points': [Vector(prev.co), Vector(prev.handle_right), Vector(next.handle_left), Vector(next.co)],
-                    'params': []
+                    'points': [Vector(current.co), Vector(current.handle_right), Vector(next.handle_left), Vector(next.co)],
+                    'cuts': []
                 })
     return segments
 
@@ -520,5 +534,4 @@ def mergeBezierEndPoints(splines):
     selected_splines[1].bezier_points[-1 if is_last_point[1] else 0].select_control_point = True
     bpy.ops.curve.make_segment()
     bpy.ops.curve.select_all(action='DESELECT')
-
     return True
