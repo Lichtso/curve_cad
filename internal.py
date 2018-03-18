@@ -125,7 +125,7 @@ def bezierRoots(dists, tollerance=0.0001):
     b = 3*(dists[0]-2*dists[1]+dists[2])
     c = 3*(dists[1]-dists[0])
     d = dists[0]
-    if abs(a) != 0: # Cubic
+    if abs(a) > tollerance: # Cubic
         E2 = a*c
         E3 = a*a*d
         A = (2*b*b-9*E2)*b+27*E3
@@ -143,17 +143,17 @@ def bezierRoots(dists, tollerance=0.0001):
             if abs(roots[index-1]-roots[index]) < tollerance:
                 roots.pop(index)
         return roots
-    elif abs(b) != 0: # Quadratic
+    elif abs(b) > tollerance: # Quadratic
         disc = c*c -4*b*d
         if disc < 0:
             return []
         disc = sqrt(disc)
         return [(-c-disc)/(2*b), (-c+disc)/(2*b)]
-    elif abs(c) != 0: # Linear
+    elif abs(c) > tollerance: # Linear
         root = -d/c
         return [root] if root >= 0.0 and root <= 1.0 else []
     else: # Constant / Parallel
-        return []
+        return None
 
 def xRaySplineIntersectionTest(spline, origin):
     intersections = []
@@ -170,29 +170,41 @@ def xRaySplineIntersectionTest(spline, origin):
            ((prev[3] < 0 and current[3] < 0) or (prev[3] > 0 and current[3] > 0)):
             intersections.pop(index)
 
-    def appendIntersection(prev, current, root, tangentY, intersectionX):
+    def appendIntersection(beginPoint, endPoint, root, tangentY, intersectionX):
         if intersectionX >= origin[0]:
-            intersections.append([prev, current, root, tangentY, intersectionX])
+            intersections.append([beginPoint, endPoint, root, tangentY, intersectionX])
             areIntersectionsAdjacent(len(intersections)-1)
 
     if spline.type == 'BEZIER':
-        for index, next in enumerate(spline.bezier_points):
-            prev = spline.bezier_points[index-1]
-            points = (prev.co, prev.handle_right, next.handle_left, next.co)
+        prev = spline.bezier_points[-1]
+        for index, endPoint in enumerate(spline.bezier_points):
+            beginPoint = spline.bezier_points[index-1]
+            points = (beginPoint.co, beginPoint.handle_right, endPoint.handle_left, endPoint.co)
             roots = bezierRoots((points[0][1]-origin[1], points[1][1]-origin[1], points[2][1]-origin[1], points[3][1]-origin[1]))
-            for root in roots:
-                appendIntersection(spline.bezier_points[index-2], spline.bezier_points[index-1], root, bezierTangentAt(points, root)[1], bezierPointAt(points, root)[0])
+            if roots == None:
+                if len(intersections) > 0 and intersections[-1][1] == beginPoint:
+                    intersections[-1][1] = endPoint
+            else:
+                for root in roots:
+                    appendIntersection(prev, endPoint, root, bezierTangentAt(points, root)[1], bezierPointAt(points, root)[0])
+                prev = endPoint
     elif spline.type == 'POLY':
-        for index, next in enumerate(spline.points):
-            points = (spline.points[index-1].co, next.co)
+        prev = spline.points[-1]
+        for index, endPoint in enumerate(spline.points):
+            beginPoint = spline.points[index-1]
+            points = (beginPoint.co, endPoint.co)
             if (points[0][0] < origin[0] and points[1][0] < origin[0]) or \
                (points[0][1] < origin[1] and points[1][1] < origin[1]) or \
                (points[0][1] > origin[1] and points[1][1] > origin[1]):
                 continue
             diff = points[1]-points[0]
-            if diff[1] != 0: # Not parallel
+            if diff[1] == 0: # Parallel
+                if len(intersections) > 0 and intersections[-1][1] == beginPoint:
+                    intersections[-1][1] = endPoint
+            else: # Not parallel
                 root = (origin[1]-points[0][1])/diff[1]
-                appendIntersection(spline.points[index-2].co, spline.points[index-1], root, diff[1], points[0][0]+diff[0]*root)
+                appendIntersection(prev, endPoint, root, diff[1], points[0][0]+diff[0]*root)
+                prev = endPoint
 
     areIntersectionsAdjacent(0)
     return intersections

@@ -82,6 +82,16 @@ class BezierCircle(bpy.types.Operator):
         points = segments[0]['points']
         circle = internal.circleOfTriangle(points[0], internal.bezierPointAt(points, 0.5), points[3])
         if circle == None:
+            self.report({'WARNING'}, 'Not a circle')
+            return {'CANCELLED'}
+
+        samples = 16
+        variance = 0
+        for t in range(0, samples):
+            variance += ((circle.center-internal.bezierPointAt(points, (t+1)/(samples-1))).length/circle.radius-1) ** 2
+        variance /= samples
+        if variance > 0.000001:
+            self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
 
         bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
