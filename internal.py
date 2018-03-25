@@ -67,6 +67,19 @@ def circleOfTriangle(a, b, c):
     plane = Plane(normal=normal/lengthN, distance=center*normal)
     return Circle(plane=plane, center=center, radius=radius)
 
+def circleOfBezier(points, tollerance=0.000001):
+    circle = circleOfTriangle(points[0], bezierPointAt(points, 0.5), points[3])
+    if circle == None:
+        return None
+    samples = 16
+    variance = 0
+    for t in range(0, samples):
+        variance += ((circle.center-bezierPointAt(points, (t+1)/(samples-1))).length/circle.radius-1) ** 2
+    variance /= samples
+    if variance > tollerance:
+        return None
+    return circle
+
 def aabbOfPoints(points):
     min = Vector(points[0])
     max = Vector(points[0])
@@ -153,12 +166,12 @@ def bezierRoots(dists, tollerance=0.0001):
         root = -d/c
         return [root] if root >= 0.0 and root <= 1.0 else []
     else: # Constant / Parallel
-        return None
+        return [] if abs(d) > tollerance else float('inf')
 
 def xRaySplineIntersectionTest(spline, origin):
+    spline_points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
+    cyclic_parallel_fix_flag = False
     intersections = []
-    if not spline.use_cyclic_u:
-        return intersections
 
     def areIntersectionsAdjacent(index, tollerance=0.0001):
         if len(intersections) < 2:
@@ -170,48 +183,56 @@ def xRaySplineIntersectionTest(spline, origin):
            ((prev[3] < 0 and current[3] < 0) or (prev[3] > 0 and current[3] > 0)):
             intersections.pop(index)
 
-    def appendIntersection(beginPoint, endPoint, root, tangentY, intersectionX):
-        if intersectionX >= origin[0]:
+    def appendIntersection(index, root, tangentY, intersectionX):
+        beginPoint = spline_points[index-1]
+        endPoint = spline_points[index]
+        if root == float('inf'): # Segment is parallel to ray
+            if index == 0 and spline.use_cyclic_u:
+                cyclic_parallel_fix_flag = True
+            if len(intersections) > 0 and intersections[-1][1] == beginPoint:
+                intersections[-1][1] = endPoint # Skip in adjacency test
+        elif intersectionX >= origin[0]:
             intersections.append([beginPoint, endPoint, root, tangentY, intersectionX])
             areIntersectionsAdjacent(len(intersections)-1)
 
     if spline.type == 'BEZIER':
-        prev = spline.bezier_points[-1]
         for index, endPoint in enumerate(spline.bezier_points):
-            beginPoint = spline.bezier_points[index-1]
+            if index == 0 and not spline.use_cyclic_u:
+                continue
+            beginPoint = spline_points[index-1]
             points = (beginPoint.co, beginPoint.handle_right, endPoint.handle_left, endPoint.co)
             roots = bezierRoots((points[0][1]-origin[1], points[1][1]-origin[1], points[2][1]-origin[1], points[3][1]-origin[1]))
-            if roots == None:
-                if len(intersections) > 0 and intersections[-1][1] == beginPoint:
-                    intersections[-1][1] = endPoint
+            if roots == float('inf'): # Intersection
+                appendIntersection(index, float('inf'), None, None)
             else:
                 for root in roots:
-                    appendIntersection(prev, endPoint, root, bezierTangentAt(points, root)[1], bezierPointAt(points, root)[0])
-                prev = endPoint
+                    appendIntersection(index, root, bezierTangentAt(points, root)[1], bezierPointAt(points, root)[0])
     elif spline.type == 'POLY':
-        prev = spline.points[-1]
         for index, endPoint in enumerate(spline.points):
-            beginPoint = spline.points[index-1]
+            if index == 0 and not spline.use_cyclic_u:
+                continue
+            beginPoint = spline_points[index-1]
             points = (beginPoint.co, endPoint.co)
             if (points[0][0] < origin[0] and points[1][0] < origin[0]) or \
                (points[0][1] < origin[1] and points[1][1] < origin[1]) or \
                (points[0][1] > origin[1] and points[1][1] > origin[1]):
                 continue
             diff = points[1]-points[0]
+            height = origin[1]-points[0][1]
             if diff[1] == 0: # Parallel
-                if len(intersections) > 0 and intersections[-1][1] == beginPoint:
-                    intersections[-1][1] = endPoint
+                if height == 0: # Intersection
+                    appendIntersection(index, float('inf'), None, None)
             else: # Not parallel
-                root = (origin[1]-points[0][1])/diff[1]
-                appendIntersection(prev, endPoint, root, diff[1], points[0][0]+diff[0]*root)
-                prev = endPoint
+                root = height/diff[1]
+                appendIntersection(index, root, diff[1], points[0][0]+diff[0]*root)
 
+    if cyclic_parallel_fix_flag:
+        appendIntersection(0, float('inf'), None, None)
     areIntersectionsAdjacent(0)
     return intersections
 
 def isPointInSpline(spline, point):
-    return len(xRaySplineIntersectionTest(spline, point))%2 == 1
-
+    return spline.use_cyclic_u and len(xRaySplineIntersectionTest(spline, point))%2 == 1
 
 def bezierSliceFromTo(points, minParam, maxParam):
     fromP = bezierPointAt(points, minParam)
@@ -295,8 +316,8 @@ def bezierIntersection(segmentA, segmentB, tollerance=0.001):
           (areIntersectionsAdjacent(segmentA, segmentB, solution[0], solution[1]) or \
            areIntersectionsAdjacent(segmentB, segmentA, solution[1], solution[0]))):
             continue
-        cutA = {'param': solution[0], 'segment': segmentA, 'otherSegment': segmentB}
-        cutB = {'param': solution[1], 'segment': segmentB, 'otherSegment': segmentA}
+        cutA = {'param': solution[0], 'segment': segmentA}
+        cutB = {'param': solution[1], 'segment': segmentB}
         cutA['otherCut'] = cutB
         cutB['otherCut'] = cutA
         segmentA['cuts'].append(cutA)

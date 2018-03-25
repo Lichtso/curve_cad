@@ -79,18 +79,8 @@ class BezierCircle(bpy.types.Operator):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        points = segments[0]['points']
-        circle = internal.circleOfTriangle(points[0], internal.bezierPointAt(points, 0.5), points[3])
+        circle = internal.circleOfBezier(segments[0]['points'])
         if circle == None:
-            self.report({'WARNING'}, 'Not a circle')
-            return {'CANCELLED'}
-
-        samples = 16
-        variance = 0
-        for t in range(0, samples):
-            variance += ((circle.center-internal.bezierPointAt(points, (t+1)/(samples-1))).length/circle.radius-1) ** 2
-        variance /= samples
-        if variance > 0.000001:
             self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
 
@@ -120,7 +110,7 @@ class BezierOffset(bpy.types.Operator):
 
     offset = bpy.props.FloatProperty(name='Offset', unit='LENGTH', default=0.1)
     pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
-    maxAngle = bpy.props.FloatProperty(name='Angle', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    max_angle = bpy.props.FloatProperty(name='Resolution', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     count = bpy.props.IntProperty(name='Count', min=1, default=1)
 
     def execute(self, context):
@@ -130,7 +120,7 @@ class BezierOffset(bpy.types.Operator):
             return {'CANCELLED'}
         for spline in splines:
             for index in range(0, self.count):
-                internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.maxAngle)
+                internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
         return {'FINISHED'}
 
 class BezierMergeEnds(bpy.types.Operator):
