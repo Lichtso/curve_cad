@@ -20,6 +20,7 @@ import bpy, math, cmath
 from mathutils import Vector, Matrix
 from collections import namedtuple
 
+param_tollerance = 0.0001
 AABB = namedtuple('AxisAlignedBoundingBox', 'center dimensions')
 Plane = namedtuple('Plane', 'normal distance')
 Circle = namedtuple('Circle', 'plane center radius')
@@ -148,12 +149,12 @@ def bezierRoots(dists, tollerance=0.0001):
         for root in cubic_roots_of_unity:
             root *= C
             root = -1/(3*a)*(b+root+B/root)
-            if abs(root.imag) < tollerance and root.real > -tollerance and root.real < 1.0+tollerance:
+            if abs(root.imag) < tollerance and root.real > -param_tollerance and root.real < 1.0+param_tollerance:
                 roots.append(max(0.0, min(root.real, 1.0)))
         # Remove doubles
         roots.sort()
         for index in range(len(roots)-1, 0, -1):
-            if abs(roots[index-1]-roots[index]) < tollerance:
+            if abs(roots[index-1]-roots[index]) < param_tollerance:
                 roots.pop(index)
         return roots
     elif abs(b) > tollerance: # Quadratic
@@ -173,13 +174,13 @@ def xRaySplineIntersectionTest(spline, origin):
     cyclic_parallel_fix_flag = False
     intersections = []
 
-    def areIntersectionsAdjacent(index, tollerance=0.0001):
+    def areIntersectionsAdjacent(index):
         if len(intersections) < 2:
             return
         prev = intersections[index-1]
         current = intersections[index]
         if prev[1] == current[0] and \
-           prev[2] > 1.0-tollerance and current[2] < tollerance and \
+           prev[2] > 1.0-param_tollerance and current[2] < param_tollerance and \
            ((prev[3] < 0 and current[3] < 0) or (prev[3] > 0 and current[3] > 0)):
             intersections.pop(index)
 
@@ -307,8 +308,8 @@ def bezierIntersection(segmentA, segmentB, tollerance=0.001):
                     solutions[otherIndex][2] = float('inf')
                 else:
                     solutions[index][2] = float('inf')
-    def areIntersectionsAdjacent(segmentA, segmentB, paramA, paramB, tollerance=0.0001):
-        return segmentA['endIndex'] == segmentB['beginIndex'] and paramA > 1-tollerance and paramB < tollerance
+    def areIntersectionsAdjacent(segmentA, segmentB, paramA, paramB):
+        return segmentA['endIndex'] == segmentB['beginIndex'] and paramA > 1-param_tollerance and paramB < param_tollerance
     result = []
     for solution in solutions:
         if (solution[2] > tollerance) or \
@@ -329,14 +330,21 @@ def bezierMultiIntersection(segments):
     for index in range(0, len(segments)):
         for otherIndex in range(index+1, len(segments)):
             bezierIntersection(segments[index], segments[otherIndex])
-    subdivideBezierSegmentsAtParams(segments)
+    groups = {}
+    for segment in segments:
+        spline = segment['spline']
+        if (spline in groups) == False:
+            groups[spline] = []
+        group = groups[spline]
+        group.append(segment)
+    for spline in groups:
+        subdivideBezierSegmentsAtParams(groups[spline])
 
 def bezierSubivideAt(points, params):
     if len(params) == 0:
         return []
     newPoints = []
     newPoints.append(points[0]+(points[1]-points[0])*params[0])
-
     for index, param in enumerate(params):
         paramLeft = param
         if index > 0:
@@ -346,23 +354,22 @@ def bezierSubivideAt(points, params):
             paramRight += 1.0
         else:
             paramRight += params[index+1]
-
         point = bezierPointAt(points, param)
         tangent = bezierTangentAt(points, param)
         newPoints.append(point-tangent*paramLeft)
         newPoints.append(point)
         newPoints.append(point+tangent*paramRight)
-
     newPoints.append(points[3]-(points[3]-points[2])*(1.0-params[-1]))
     return newPoints
 
 def subdivideBezierSegmentAtParams(segment):
     # Blender only allows uniform subdivision. Use this method to subdivide at arbitrary params.
+    # NOTE: segment['cuts'] must be sorted by param
     if len(segment['cuts']) == 0:
         return
-    segment['cuts'].sort(key=(lambda cut: cut['param']))
 
-    newPoints = bezierSubivideAt(segment['points'], list(map(lambda cut: cut['param'], segment['cuts'])))
+    params = [cut['param'] for cut in segment['cuts']]
+    newPoints = bezierSubivideAt(segment['points'], params)
     bpy.ops.curve.select_all(action='DESELECT')
     segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
     segment['beginPoint'].select_right_handle = True
@@ -373,12 +380,11 @@ def subdivideBezierSegmentAtParams(segment):
     segment['endPoint'].handle_left_type = 'FREE'
     segment['endPoint'].handle_right_type = 'FREE'
 
-    bpy.ops.curve.subdivide(number_cuts=len(segment['cuts']))
+    bpy.ops.curve.subdivide(number_cuts=len(params))
     if segment['endIndex'] > 0:
-        segment['endIndex'] += len(segment['cuts'])
+        segment['endIndex'] += len(params)
     segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
     segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
-
     segment['beginPoint'].select_right_handle = False
     segment['beginPoint'].handle_right = newPoints[0]
     segment['endPoint'].select_left_handle = False
@@ -397,26 +403,18 @@ def subdivideBezierSegmentAtParams(segment):
         newPoint.handle_right = newPoints[index*3+3]
 
 def subdivideBezierSegmentsAtParams(segments):
-    groups = {}
+    segments.sort(key=(lambda segment: segment['beginIndex']))
+    indexOffset = 0
     for segment in segments:
-        spline = segment['spline']
-        if (spline in groups) == False:
-            groups[spline] = []
-        group = groups[spline]
-        group.append(segment)
-    for spline in groups:
-        group = groups[spline]
-        group.sort(key=(lambda segment: segment['beginIndex']))
-        indexOffset = 0
-        for segment in group:
-            segment['beginIndex'] += indexOffset
-            if segment['endIndex'] > 0:
-                segment['endIndex'] += indexOffset
-            indexOffset += len(segment['cuts'])
-            subdivideBezierSegmentAtParams(segment)
-        for segment in group:
-            segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
-            segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
+        segment['beginIndex'] += indexOffset
+        if segment['endIndex'] > 0:
+            segment['endIndex'] += indexOffset
+        segment['cuts'].sort(key=(lambda cut: cut['param']))
+        subdivideBezierSegmentAtParams(segment)
+        indexOffset += len(segment['cuts'])
+    for segment in segments:
+        segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
+        segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
 
 def bezierSegments(splines, selection_only):
     segments = []
@@ -503,20 +501,22 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
                     add_vertex_for(segment['points'], t)
                     prev_tangent = tangent
 
+    first_flag = True
     i = (0 if cyclic else 1)
     while i < len(vertices):
-        j = i+2
-        while j < (len(vertices) - (0 if i > 0 else 1)):
+        j = len(vertices) - (1 if i > 0 else 2)
+        while j >= i+2:
             intersection = lineIntersection(vertices[i-1], vertices[i], vertices[j-1], vertices[j])
             if intersection == None:
-                j += 1
+                j -= 1
                 continue
-            if j-i < len(vertices)/2:
-                vertices = vertices[:i] + [intersection] + vertices[j:]
-                j = i+2
+            if first_flag:
+                first_flag = False
+                vertices = vertices[i:j] + [intersection] # Keep Inner
+                i = (0 if cyclic else 1)
             else:
-                vertices = vertices[i:j] + [intersection]
-                j = (0 if cyclic else 1)
+                vertices = vertices[:i] + [intersection] + vertices[j:] # Keep Outer
+            j = len(vertices) - (1 if i > 0 else 2)
         i += 1
 
     spline = bpy.context.object.data.splines.new(type='POLY')
