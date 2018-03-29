@@ -33,7 +33,7 @@ units = [
 
 class SVG_Export(bpy.types.Operator, ExportHelper):
     bl_idname = 'export_svg_format.svg'
-    bl_label = 'SVG Export'
+    bl_description = bl_label = 'Curves (.svg)'
     filename_ext = '.svg'
 
     selection_only = bpy.props.BoolProperty(name='Selection only', description='instead of exporting all visible curves')

@@ -112,15 +112,16 @@ class BezierOffset(bpy.types.Operator):
     pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
     max_angle = bpy.props.FloatProperty(name='Resolution', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     count = bpy.props.IntProperty(name='Count', min=1, default=1)
+    select = bpy.props.BoolProperty(name='Select')
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(bpy.context.object.data.splines)
+        splines = internal.bezierSelectedSplines()
         if len(splines) == 0:
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}
         for spline in splines:
             for index in range(0, self.count):
-                internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
+                internal.offsetPolygonOfSpline(self.select, spline, self.offset+self.pitch*index, self.max_angle)
         return {'FINISHED'}
 
 class BezierMergeEnds(bpy.types.Operator):
@@ -129,7 +130,7 @@ class BezierMergeEnds(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        if not internal.mergeBezierEndPoints(bpy.context.object.data.splines):
+        if not internal.mergeBezierEndPoints():
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
         return {'FINISHED'}
@@ -146,21 +147,21 @@ class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
 
     def draw(self, context):
         for operator in operators:
-            self.layout.operator(operator.bl_idname, text=operator.bl_description)
+            self.layout.operator(operator.bl_idname)
 
-def menu_func(self, context):
+def menu_edit_curve_specials(self, context):
     self.layout.menu('VIEW3D_MT_edit_curve_cad')
     self.layout.separator()
 
-def menu_func_export(self, context):
-    self.layout.operator(svg_export.SVG_Export.bl_idname, text='Curves (.svg)')
+def menu_file_export(self, context):
+    self.layout.operator(svg_export.SVG_Export.bl_idname)
 
 def register():
     bpy.utils.register_module(__name__)
-    bpy.types.VIEW3D_MT_edit_curve_specials.prepend(menu_func)
-    bpy.types.INFO_MT_file_export.append(menu_func_export)
+    bpy.types.VIEW3D_MT_edit_curve_specials.prepend(menu_edit_curve_specials)
+    bpy.types.INFO_MT_file_export.append(menu_file_export)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
-    bpy.types.VIEW3D_MT_edit_curve_specials.remove(menu_func)
-    bpy.types.INFO_MT_file_export.remove(menu_func_export)
+    bpy.types.VIEW3D_MT_edit_curve_specials.remove(menu_edit_curve_specials)
+    bpy.types.INFO_MT_file_export.remove(menu_file_export)

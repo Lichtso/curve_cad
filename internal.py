@@ -47,6 +47,13 @@ def lineIntersection(beginA, endA, beginB, endB):
         return None
     return (intersection[2]+intersection[3])*0.5
 
+def areaOfPolygon(vertices):
+    area = 0
+    for index, current in enumerate(vertices):
+        prev = vertices[index-1]
+        area += (current[0]+prev[0])*(current[1]-prev[1])
+    return area*0.5
+
 def circleOfTriangle(a, b, c):
     # https://en.wikipedia.org/wiki/Circumscribed_circle#Cartesian_coordinates_from_cross-_and_dot-products
     dirBA = a-b
@@ -437,9 +444,9 @@ def bezierSegments(splines, selection_only):
                 })
     return segments
 
-def bezierSelectedSplines(splines):
+def bezierSelectedSplines():
     result = []
-    for spline in splines:
+    for spline in bpy.context.object.data.splines:
         selected = (spline.type == 'BEZIER')
         for index, point in enumerate(spline.bezier_points):
             if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
@@ -449,7 +456,18 @@ def bezierSelectedSplines(splines):
             result.append(spline)
     return result
 
-def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
+def addPolygon(vertices, weights, select, cyclic=False):
+    spline = bpy.context.object.data.splines.new(type='POLY')
+    spline.use_cyclic_u = cyclic
+    spline.points.add(count=len(vertices)-1)
+    for index, point in enumerate(spline.points):
+        point.select = select
+        point.co.xyz = vertices[index]
+        if weights:
+            point.weight_softbody = weights[index]
+    return spline
+
+def offsetPolygonOfSpline(select, spline, distance, max_angle, bezier_samples=128):
     corners = []
     vertices = []
     cyclic = spline.use_cyclic_u
@@ -501,38 +519,32 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
                     add_vertex_for(segment['points'], t)
                     prev_tangent = tangent
 
-    first_flag = True
     i = (0 if cyclic else 1)
+    sign = -1 if areaOfPolygon([point.co for point in spline.bezier_points]) < 0 else 1
     while i < len(vertices):
-        j = len(vertices) - (1 if i > 0 else 2)
-        while j >= i+2:
+        j = i+2
+        while j < len(vertices) - (0 if i > 0 else 1):
             intersection = lineIntersection(vertices[i-1], vertices[i], vertices[j-1], vertices[j])
             if intersection == None:
-                j -= 1
+                j += 1
                 continue
-            if first_flag:
-                first_flag = False
-                vertices = vertices[i:j] + [intersection] # Keep Inner
+            keepInner = vertices[i:j] + [intersection]
+            keepOuter = vertices[:i] + [intersection] + vertices[j:]
+            if sign*areaOfPolygon(keepInner) > sign*areaOfPolygon(keepOuter):
+                vertices = keepInner
                 i = (0 if cyclic else 1)
             else:
-                vertices = vertices[:i] + [intersection] + vertices[j:] # Keep Outer
-            j = len(vertices) - (1 if i > 0 else 2)
+                vertices = keepOuter
+            j = i+2
         i += 1
 
-    spline = bpy.context.object.data.splines.new(type='POLY')
-    spline.use_cyclic_u = cyclic
-    spline.points.add(count=len(vertices)-1)
-    for index, vertex in enumerate(vertices):
-        point = spline.points[index]
-        point.select = True
-        point.co.xyz = vertex
-    return spline
+    return addPolygon(vertices, None, select, cyclic)
 
-def mergeBezierEndPoints(splines):
+def mergeBezierEndPoints():
     points = []
     selected_splines = []
     is_last_point = []
-    for spline in splines:
+    for spline in bpy.context.object.data.splines:
         if spline.type != 'BEZIER' or spline.use_cyclic_u:
             continue
         if spline.bezier_points[0].select_control_point:
