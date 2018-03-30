@@ -19,8 +19,10 @@
 import os, bpy, importlib, math
 if 'internal' in locals():
     importlib.reload(internal)
-    importlib.reload(svg_export)
-from . import internal, svg_export
+    importlib.reload(cad)
+    importlib.reload(toolpath)
+    importlib.reload(export)
+from . import internal, cad, toolpath, export
 
 bl_info = {
     'name': 'Curve CAD Tools',
@@ -33,135 +35,40 @@ bl_info = {
     'tracker_url': 'https://github.com/lichtso/curve_cad/issues'
 }
 
-class BezierSubdivide(bpy.types.Operator):
-    bl_idname = 'curve.bezier_subdivide'
-    bl_description = bl_label = 'Bezier Subdivide'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    params = bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
-
-    def execute(self, context):
-        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
-        if len(segments) == 0:
-            self.report({'WARNING'}, 'Nothing selected')
-            return {'CANCELLED'}
-
-        cuts = []
-        for param in self.params.split(' '):
-            cuts.append({'param': max(0.0, min(float(param), 1.0))})
-        for segment in segments:
-            segment['cuts'].extend(cuts)
-        internal.subdivideBezierSegmentsAtParams(segments)
-        return {'FINISHED'}
-
-class BezierIntersection(bpy.types.Operator):
-    bl_idname = 'curve.bezier_intersection'
-    bl_description = bl_label = 'Bezier Intersection'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
-        if len(segments) < 2:
-            self.report({'WARNING'}, 'Invalid selection')
-            return {'CANCELLED'}
-
-        internal.bezierMultiIntersection(segments)
-        return {'FINISHED'}
-
-class BezierCircle(bpy.types.Operator):
-    bl_idname = 'curve.bezier_circle'
-    bl_description = bl_label = 'Bezier Circle'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
-        if len(segments) != 1:
-            self.report({'WARNING'}, 'Invalid selection')
-            return {'CANCELLED'}
-
-        circle = internal.circleOfBezier(segments[0]['points'])
-        if circle == None:
-            self.report({'WARNING'}, 'Not a circle')
-            return {'CANCELLED'}
-
-        bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
-        return {'FINISHED'}
-
-class BezierLength(bpy.types.Operator):
-    bl_idname = 'curve.bezier_length'
-    bl_description = bl_label = 'Bezier Length'
-
-    def execute(self, context):
-        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
-        if len(segments) == 0:
-            self.report({'WARNING'}, 'Nothing selected')
-            return {'CANCELLED'}
-
-        length = 0
-        for segment in segments:
-            length += internal.bezierLength(segment['points'])
-        self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
-        return {'FINISHED'}
-
-class BezierOffset(bpy.types.Operator):
-    bl_idname = 'curve.bezier_offset'
-    bl_description = bl_label = 'Bezier Offset'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    offset = bpy.props.FloatProperty(name='Offset', unit='LENGTH', default=0.1)
-    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
-    max_angle = bpy.props.FloatProperty(name='Resolution', unit='ROTATION', min=math.pi/128, default=math.pi/16)
-    count = bpy.props.IntProperty(name='Count', min=1, default=1)
-    select = bpy.props.BoolProperty(name='Select')
-
-    def execute(self, context):
-        splines = internal.bezierSelectedSplines()
-        if len(splines) == 0:
-            self.report({'WARNING'}, 'Nothing selected')
-            return {'CANCELLED'}
-        for spline in splines:
-            for index in range(0, self.count):
-                internal.offsetPolygonOfSpline(self.select, spline, self.offset+self.pitch*index, self.max_angle)
-        return {'FINISHED'}
-
-class BezierMergeEnds(bpy.types.Operator):
-    bl_idname = 'curve.bezier_merge_ends'
-    bl_description = bl_label = 'Bezier Merge Ends'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        if not internal.mergeBezierEndPoints():
-            self.report({'WARNING'}, 'Invalid selection')
-            return {'CANCELLED'}
-        return {'FINISHED'}
-
-operators = [BezierIntersection, BezierMergeEnds, BezierSubdivide, BezierOffset, BezierCircle, BezierLength]
-
 class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
-    bl_label = bl_info['name']
-
-    @classmethod
-    def poll(cls, context):
-        obj = bpy.context.object
-        return obj != None and obj.type == 'CURVE' and obj.mode == 'EDIT'
+    bl_label = 'Bezier CAD'
 
     def draw(self, context):
-        for operator in operators:
+        for operator in cad.operators:
             self.layout.operator(operator.bl_idname)
 
 def menu_edit_curve_specials(self, context):
     self.layout.menu('VIEW3D_MT_edit_curve_cad')
     self.layout.separator()
 
+class INFO_MT_curve_add_toolpath(bpy.types.Menu):
+    bl_label = 'Toolpath'
+
+    def draw(self, context):
+        for operator in toolpath.operators:
+            self.layout.operator(operator.bl_idname)
+
+def menu_curve_add(self, context):
+    self.layout.separator()
+    self.layout.menu('INFO_MT_curve_add_toolpath')
+
 def menu_file_export(self, context):
-    self.layout.operator(svg_export.SVG_Export.bl_idname)
+    for operator in export.operators:
+        self.layout.operator(operator.bl_idname)
 
 def register():
     bpy.utils.register_module(__name__)
     bpy.types.VIEW3D_MT_edit_curve_specials.prepend(menu_edit_curve_specials)
+    bpy.types.INFO_MT_curve_add.append(menu_curve_add)
     bpy.types.INFO_MT_file_export.append(menu_file_export)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
     bpy.types.VIEW3D_MT_edit_curve_specials.remove(menu_edit_curve_specials)
+    bpy.types.INFO_MT_curve_add.remove(menu_curve_add)
     bpy.types.INFO_MT_file_export.remove(menu_file_export)

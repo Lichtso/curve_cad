@@ -16,7 +16,7 @@
 #
 #  ***** GPL LICENSE BLOCK *****
 
-import bpy
+import bpy, math
 from mathutils import Vector, Matrix
 from bpy_extras.io_utils import ExportHelper
 units = [
@@ -31,7 +31,7 @@ units = [
     ('in', 'Inch', '0.0254', 8)
 ]
 
-class SVG_Export(bpy.types.Operator, ExportHelper):
+class svgExport(bpy.types.Operator, ExportHelper):
     bl_idname = 'export_svg_format.svg'
     bl_description = bl_label = 'Curves (.svg)'
     filename_ext = '.svg'
@@ -166,3 +166,5 @@ class SVG_Export(bpy.types.Operator, ExportHelper):
             f.write('</svg>')
 
         return {'FINISHED'}
+
+operators = [svgExport]

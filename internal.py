@@ -242,6 +242,15 @@ def xRaySplineIntersectionTest(spline, origin):
 def isPointInSpline(spline, point):
     return spline.use_cyclic_u and len(xRaySplineIntersectionTest(spline, point))%2 == 1
 
+def bezierSegmentPoints(begin, end):
+    return [begin.co, begin.handle_right, end.handle_left, end.co]
+
+def deleteFromArray(item, array):
+    for index, current in enumerate(array):
+        if current is item:
+            array.pop(index)
+            break
+
 def bezierSliceFromTo(points, minParam, maxParam):
     fromP = bezierPointAt(points, minParam)
     fromT = bezierTangentAt(points, minParam)
@@ -297,11 +306,13 @@ def bezierIntersectionNarrowPhase(broadPhase, pointsA, pointsB, tollerance=0.000
 
 def bezierIntersection(segmentA, segmentB, tollerance=0.001):
     solutions = []
-    bezierIntersectionBroadPhase(solutions, segmentA['points'], segmentB['points'])
+    pointsA = bezierSegmentPoints(segmentA['beginPoint'], segmentA['endPoint'])
+    pointsB = bezierSegmentPoints(segmentB['beginPoint'], segmentB['endPoint'])
+    bezierIntersectionBroadPhase(solutions, pointsA, pointsB)
     if len(solutions) == 0:
         return []
     for index in range(0, len(solutions)):
-        solutions[index] = bezierIntersectionNarrowPhase(solutions[index], segmentA['points'], segmentB['points'])
+        solutions[index] = bezierIntersectionNarrowPhase(solutions[index], pointsA, pointsB)
     for index in range(0, len(solutions)):
         for otherIndex in range(0, len(solutions)):
             if solutions[index][2] == float('inf'):
@@ -337,15 +348,8 @@ def bezierMultiIntersection(segments):
     for index in range(0, len(segments)):
         for otherIndex in range(index+1, len(segments)):
             bezierIntersection(segments[index], segments[otherIndex])
-    groups = {}
-    for segment in segments:
-        spline = segment['spline']
-        if (spline in groups) == False:
-            groups[spline] = []
-        group = groups[spline]
-        group.append(segment)
-    for spline in groups:
-        subdivideBezierSegmentsAtParams(groups[spline])
+    cleanupBezierIntersections(segments)
+    subdivideBezierSegments(segments)
 
 def bezierSubivideAt(points, params):
     if len(params) == 0:
@@ -369,14 +373,16 @@ def bezierSubivideAt(points, params):
     newPoints.append(points[3]-(points[3]-points[2])*(1.0-params[-1]))
     return newPoints
 
-def subdivideBezierSegmentAtParams(segment):
+def subdivideBezierSegment(segment):
     # Blender only allows uniform subdivision. Use this method to subdivide at arbitrary params.
     # NOTE: segment['cuts'] must be sorted by param
     if len(segment['cuts']) == 0:
         return
 
+    segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
+    segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
     params = [cut['param'] for cut in segment['cuts']]
-    newPoints = bezierSubivideAt(segment['points'], params)
+    newPoints = bezierSubivideAt(bezierSegmentPoints(segment['beginPoint'], segment['endPoint']), params)
     bpy.ops.curve.select_all(action='DESELECT')
     segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
     segment['beginPoint'].select_right_handle = True
@@ -409,19 +415,53 @@ def subdivideBezierSegmentAtParams(segment):
         newPoint.co = newPoints[index*3+2]
         newPoint.handle_right = newPoints[index*3+3]
 
-def subdivideBezierSegmentsAtParams(segments):
-    segments.sort(key=(lambda segment: segment['beginIndex']))
+def cleanupBezierIntersections(segments):
+    def areCutsAdjacent(cutA, cutB):
+        return cutA['segment']['beginIndex'] == cutB['segment']['endIndex'] and \
+               cutA['param'] < param_tollerance and cutB['param'] > 1.0-param_tollerance
+    for segment in segments:
+        segment['cuts'].sort(key=(lambda cut: cut['param']))
+        for index in range(len(segment['cuts'])-1, 0, -1):
+            prev = segment['cuts'][index-1]
+            current = segment['cuts'][index]
+            if abs(prev['param']-current['param']) < param_tollerance and \
+               prev['otherCut']['segment']['spline'] == current['otherCut']['segment']['spline'] and \
+               (areCutsAdjacent(prev['otherCut'], current['otherCut']) or \
+                areCutsAdjacent(current['otherCut'], prev['otherCut'])):
+                deleteFromArray(prev['otherCut'], prev['otherCut']['segment']['cuts'])
+                deleteFromArray(current['otherCut'], current['otherCut']['segment']['cuts'])
+                segment['cuts'].pop(index-1 if current['otherCut']['param'] < param_tollerance else index)
+                current = segment['cuts'][index-1]['otherCut']
+                current['segment']['extraCut'] = current
+
+def subdivideBezierSegmentsOfSameSpline(segments):
+    # NOTE: segment['cuts'] must be sorted by param
     indexOffset = 0
     for segment in segments:
         segment['beginIndex'] += indexOffset
         if segment['endIndex'] > 0:
             segment['endIndex'] += indexOffset
-        segment['cuts'].sort(key=(lambda cut: cut['param']))
-        subdivideBezierSegmentAtParams(segment)
+        subdivideBezierSegment(segment)
         indexOffset += len(segment['cuts'])
     for segment in segments:
         segment['beginPoint'] = segment['spline'].bezier_points[segment['beginIndex']]
         segment['endPoint'] = segment['spline'].bezier_points[segment['endIndex']]
+
+def subdivideBezierSegments(segments):
+    # NOTE: segment['cuts'] must be sorted by param
+    groups = {}
+    for segment in segments:
+        spline = segment['spline']
+        if (spline in groups) == False:
+            groups[spline] = []
+        group = groups[spline]
+        group.append(segment)
+    for spline in groups:
+        subdivideBezierSegmentsOfSameSpline(groups[spline])
+
+def curveObject():
+    obj = bpy.context.object
+    return obj if obj != None and obj.type == 'CURVE' and obj.mode == 'EDIT' else None
 
 def bezierSegments(splines, selection_only):
     segments = []
@@ -439,88 +479,105 @@ def bezierSegments(splines, selection_only):
                     'endIndex': index+1 if index < len(spline.bezier_points)-1 else 0,
                     'beginPoint': current,
                     'endPoint': next,
-                    'points': [Vector(current.co), Vector(current.handle_right), Vector(next.handle_left), Vector(next.co)],
                     'cuts': []
                 })
     return segments
 
-def bezierSelectedSplines():
+def bezierSelectedSplines(includeBezier, includePolygon):
     result = []
     for spline in bpy.context.object.data.splines:
-        selected = (spline.type == 'BEZIER')
-        for index, point in enumerate(spline.bezier_points):
-            if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
-                selected = False
-                break
+        selected = False
+        if spline.type == 'BEZIER' and includeBezier:
+            selected = True
+            for index, point in enumerate(spline.bezier_points):
+                if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
+                    selected = False
+                    break
+        if spline.type == 'POLY' and includePolygon:
+            selected = True
+            for index, point in enumerate(spline.points):
+                if not point.select:
+                    selected = False
+                    break
         if selected:
             result.append(spline)
     return result
 
-def addPolygon(vertices, weights, select, cyclic=False):
+def addCurveObject(name):
+    bpy.ops.object.select_all(action='DESELECT')
+    curve = bpy.data.curves.new(name=name, type='CURVE')
+    curve.dimensions = '3D'
+    obj = bpy.data.objects.new(name, curve)
+    obj.select = True
+    bpy.context.scene.objects.link(obj)
+    bpy.context.scene.objects.active = obj
+    return obj
+
+def addPolygon(vertices, weights=None, cyclic=False):
     spline = bpy.context.object.data.splines.new(type='POLY')
     spline.use_cyclic_u = cyclic
     spline.points.add(count=len(vertices)-1)
     for index, point in enumerate(spline.points):
-        point.select = select
         point.co.xyz = vertices[index]
         if weights:
             point.weight_softbody = weights[index]
     return spline
 
-def offsetPolygonOfSpline(select, spline, distance, max_angle, bezier_samples=128):
-    corners = []
-    vertices = []
-    cyclic = spline.use_cyclic_u
-    segments = bezierSegments([spline], False)
-    if len(segments) == 0:
-        return None
-
-    def add_vertex_for(points, param):
-        position = bezierPointAt(points, param)
-        tangent = bezierTangentAt(points, param)
-        tangent.normalize()
+def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
+    def offsetVertex(position, tangent):
         normal = Vector((-tangent.y, tangent.x, 0))
-        vertices.append(position+normal*distance)
+        return (normal, position+normal*distance)
 
-    for index, segment in enumerate(segments):
-        corner = segment['points'][0]
-        begin_tangent = bezierTangentAt(segments[index-1]['points'], 1).normalized()
-        end_tangent = bezierTangentAt(segment['points'], 0).normalized()
-        angle = begin_tangent*end_tangent
+    vertices = []
+    spline_points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
+    for index, spline_point in enumerate(spline_points):
+        if index == 0 and not spline.use_cyclic_u:
+            continue
+
+        prev = spline_points[index-2]
+        current = spline_points[index-1]
+        next = spline_points[index]
+        if spline.type == 'BEZIER':
+            segment_points = bezierSegmentPoints(current, next)
+            prev_tangent = (current.co-current.handle_left).normalized()
+            current_tangent = (current.handle_right-current.co).normalized()
+            next_tangent = (next.co-next.handle_left).normalized()
+        else:
+            segment_points = [current.co.xyz, None, None, next.co.xyz]
+            prev_tangent = (segment_points[0]-prev.co.xyz).normalized()
+            current_tangent = next_tangent = (segment_points[3]-segment_points[0]).normalized()
+        angle = prev_tangent*current_tangent
         angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
-        place_vertex = angle != 0 or (not cyclic and index == 0)
 
-        if angle != 0 and (cyclic or index > 0):
-            begin_normal = Vector((-begin_tangent.y, begin_tangent.x, 0))
-            end_normal = Vector((-end_tangent.y, end_tangent.x, 0))
-            begin_point = corner+begin_normal*distance
-            end_point = corner+end_normal*distance
+        if angle != 0 and (spline.use_cyclic_u or index != 1):
+            begin_normal, begin_point = offsetVertex(segment_points[0], prev_tangent)
+            end_normal, end_point = offsetVertex(segment_points[0], current_tangent)
             normal = begin_normal.cross(end_normal)
             circle_samples = math.ceil(angle/max_angle)
             angle = math.copysign(angle, normal[2])
-            beginAngle = math.atan2(begin_normal[1], begin_normal[0])
-            intersection = nearestPointOfLines(begin_point, begin_tangent, end_point, end_tangent)
+            beginAngle = math.atan2(begin_normal.y, begin_normal.x)
+            intersection = nearestPointOfLines(begin_point, prev_tangent, end_point, current_tangent)
             if intersection[0] > 0: # and intersection[1] < 0:
                 for t in range(1, circle_samples):
                     t = beginAngle+angle*t/circle_samples
                     normal = Vector((math.cos(t), math.sin(t), 0))
-                    vertices.append(corner+normal*distance)
+                    vertices.append(segment_points[0]+normal*distance)
 
-        if place_vertex:
-            add_vertex_for(segment['points'], 0)
-        if segment['beginPoint'].handle_right_type == 'VECTOR' and segment['endPoint'].handle_left_type == 'VECTOR':
-            add_vertex_for(segment['points'], 1)
+        if angle != 0 or (not spline.use_cyclic_u and index == 1):
+            vertices.append(offsetVertex(segment_points[0], current_tangent)[1])
+        if spline.type != 'BEZIER' or (current.handle_right_type == 'VECTOR' and next.handle_left_type == 'VECTOR'):
+            vertices.append(offsetVertex(segment_points[3], next_tangent)[1])
         else:
-            prev_tangent = bezierTangentAt(segment['points'], 0).normalized()
+            prev_tangent = bezierTangentAt(segment_points, 0).normalized()
             for t in range(1, bezier_samples+1):
                 t /= bezier_samples
-                tangent = bezierTangentAt(segment['points'], t).normalized()
+                tangent = bezierTangentAt(segment_points, t).normalized()
                 if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= max_angle:
-                    add_vertex_for(segment['points'], t)
+                    vertices.append(offsetVertex(bezierPointAt(segment_points, t), tangent)[1])
                     prev_tangent = tangent
 
-    i = (0 if cyclic else 1)
-    sign = -1 if areaOfPolygon([point.co for point in spline.bezier_points]) < 0 else 1
+    sign = -1 if areaOfPolygon([point.co for point in spline_points]) < 0 else 1
+    i = (0 if spline.use_cyclic_u else 1)
     while i < len(vertices):
         j = i+2
         while j < len(vertices) - (0 if i > 0 else 1):
@@ -532,51 +589,10 @@ def offsetPolygonOfSpline(select, spline, distance, max_angle, bezier_samples=12
             keepOuter = vertices[:i] + [intersection] + vertices[j:]
             if sign*areaOfPolygon(keepInner) > sign*areaOfPolygon(keepOuter):
                 vertices = keepInner
-                i = (0 if cyclic else 1)
+                i = (0 if spline.use_cyclic_u else 1)
             else:
                 vertices = keepOuter
             j = i+2
         i += 1
 
-    return addPolygon(vertices, None, select, cyclic)
-
-def mergeBezierEndPoints():
-    points = []
-    selected_splines = []
-    is_last_point = []
-    for spline in bpy.context.object.data.splines:
-        if spline.type != 'BEZIER' or spline.use_cyclic_u:
-            continue
-        if spline.bezier_points[0].select_control_point:
-            points.append(spline.bezier_points[0])
-            selected_splines.append(spline)
-            is_last_point.append(False)
-        if spline.bezier_points[-1].select_control_point:
-            points.append(spline.bezier_points[-1])
-            selected_splines.append(spline)
-            is_last_point.append(True)
-
-    if len(points) != 2:
-        return False
-
-    points[0].handle_left_type = 'FREE'
-    points[0].handle_right_type = 'FREE'
-    new_co = (points[0].co+points[1].co)*0.5
-
-    handle = (points[1].handle_left if is_last_point[1] else points[1].handle_right)+new_co-points[1].co
-    if is_last_point[0]:
-        points[0].handle_left += new_co-points[0].co
-        points[0].handle_right = handle
-    else:
-        points[0].handle_right += new_co-points[0].co
-        points[0].handle_left = handle
-    points[0].co = new_co
-
-    bpy.ops.curve.select_all(action='DESELECT')
-    points[1].select_control_point = True
-    bpy.ops.curve.delete()
-    selected_splines[0].bezier_points[-1 if is_last_point[0] else 0].select_control_point = True
-    selected_splines[1].bezier_points[-1 if is_last_point[1] else 0].select_control_point = True
-    bpy.ops.curve.make_segment()
-    bpy.ops.curve.select_all(action='DESELECT')
-    return True
+    return addPolygon(vertices, None, spline.use_cyclic_u)
