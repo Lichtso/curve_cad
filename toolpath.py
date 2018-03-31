@@ -29,6 +29,7 @@ class OffsetCurve(bpy.types.Operator):
     pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
     max_angle = bpy.props.FloatProperty(name='Resolution', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     count = bpy.props.IntProperty(name='Count', min=1, default=1)
+    connect = bpy.props.BoolProperty(name='Connect')
 
     @classmethod
     def poll(cls, context):
@@ -48,8 +49,23 @@ class OffsetCurve(bpy.types.Operator):
             internal.addCurveObject('Toolpath')
 
         for spline in splines:
+            vertices = []
             for index in range(0, self.count):
-                internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
+                trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
+                if len(trace) == 0:
+                    continue
+                if self.connect:
+                    if spline.use_cyclic_u:
+                        trace.append(trace[0])
+                        vertices = trace+vertices
+                    else:
+                        if index%2 == 1:
+                            trace = list(reversed(trace))
+                        vertices = trace+vertices
+                else:
+                    internal.addPolygon(bpy.context.object, trace, None, spline.use_cyclic_u)
+            if self.connect:
+                internal.addPolygon(bpy.context.object, vertices)
         return {'FINISHED'}
 
 operators = [OffsetCurve]

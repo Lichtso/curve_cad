@@ -47,6 +47,14 @@ def lineIntersection(beginA, endA, beginB, endB):
         return None
     return (intersection[2]+intersection[3])*0.5
 
+def linePlaneIntersection(lineBegin, lineEnd, plane):
+    det = (lineEnd-lineBegin)*plane.normal
+    return float('nan') if det == 0 else (plane.distance-lineBegin*plane.normal)/det
+
+    # lineDiff = lineEnd-lineBegin
+    # det = lineDiff*plane.normal
+    # return float('nan') if det == 0 else (plane.normal*plane.distance-lineBegin)*plane.normal/det
+
 def areaOfPolygon(vertices):
     area = 0
     for index, current in enumerate(vertices):
@@ -104,6 +112,25 @@ def aabbIntersectionTest(a, b, tollerance=0.0):
         if abs(a.center[i]-b.center[i]) > (a.dimensions[i]+b.dimensions[i]+tollerance):
             return False
     return True
+
+def isPointInAABB(point, aabb, tollerance=0.0):
+    for i in range(0, 3):
+        if point[i] < aabb.center[i]-aabb.dimensions[i]*0.5-tollerance or point[i] > aabb.center[i]+aabb.dimensions[i]*0.5+tollerance:
+            return False
+    return True
+
+def lineAABBIntersection(lineBegin, lineEnd, aabb):
+    intersections = []
+    for i in range(0, 3):
+        normal = [0, 0, 0]
+        normal = Vector(normal[0:i] + [1] + normal[i+1:])
+        for j in range(-1, 2, 2):
+            plane = Plane(normal=normal, distance=aabb.center[i]+j*aabb.dimensions[i]*0.5)
+            param = linePlaneIntersection(lineBegin, lineEnd, plane)
+            point = lineBegin+param*(lineEnd-lineBegin)
+            if param > 0 and param < 1 and isPointInAABB(point, aabb):
+                intersections.append((param, point))
+    return intersections
 
 def bezierPointAt(points, t):
     s = 1-t
@@ -239,7 +266,7 @@ def xRaySplineIntersectionTest(spline, origin):
     areIntersectionsAdjacent(0)
     return intersections
 
-def isPointInSpline(spline, point):
+def isPointInSpline(point, spline):
     return spline.use_cyclic_u and len(xRaySplineIntersectionTest(spline, point))%2 == 1
 
 def bezierSegmentPoints(begin, end):
@@ -513,8 +540,8 @@ def addCurveObject(name):
     bpy.context.scene.objects.active = obj
     return obj
 
-def addPolygon(vertices, weights=None, cyclic=False):
-    spline = bpy.context.object.data.splines.new(type='POLY')
+def addPolygon(obj, vertices, weights=None, cyclic=False):
+    spline = obj.data.splines.new(type='POLY')
     spline.use_cyclic_u = cyclic
     spline.points.add(count=len(vertices)-1)
     for index, point in enumerate(spline.points):
@@ -549,6 +576,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
         angle = prev_tangent*current_tangent
         angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
 
+        # Convex Round Cap
         if angle != 0 and (spline.use_cyclic_u or index != 1):
             begin_normal, begin_point = offsetVertex(segment_points[0], prev_tangent)
             end_normal, end_point = offsetVertex(segment_points[0], current_tangent)
@@ -567,7 +595,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
             vertices.append(offsetVertex(segment_points[0], current_tangent)[1])
         if spline.type != 'BEZIER' or (current.handle_right_type == 'VECTOR' and next.handle_left_type == 'VECTOR'):
             vertices.append(offsetVertex(segment_points[3], next_tangent)[1])
-        else:
+        else: # Trace Bezier Segment
             prev_tangent = bezierTangentAt(segment_points, 0).normalized()
             for t in range(1, bezier_samples+1):
                 t /= bezier_samples
@@ -576,7 +604,9 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
                     vertices.append(offsetVertex(bezierPointAt(segment_points, t), tangent)[1])
                     prev_tangent = tangent
 
-    sign = -1 if areaOfPolygon([point.co for point in spline_points]) < 0 else 1
+    # Solve Self Intersections
+    original_area = areaOfPolygon([point.co for point in spline_points])
+    sign = -1 if distance < 0 else 1
     i = (0 if spline.use_cyclic_u else 1)
     while i < len(vertices):
         j = i+2
@@ -585,14 +615,15 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
             if intersection == None:
                 j += 1
                 continue
-            keepInner = vertices[i:j] + [intersection]
-            keepOuter = vertices[:i] + [intersection] + vertices[j:]
-            if sign*areaOfPolygon(keepInner) > sign*areaOfPolygon(keepOuter):
-                vertices = keepInner
+            areaInner = sign*areaOfPolygon([intersection, vertices[i], vertices[j-1]])
+            areaOuter = sign*areaOfPolygon([intersection, vertices[j], vertices[i-1]])
+            if areaInner > areaOuter:
+                vertices = vertices[i:j] + [intersection]
                 i = (0 if spline.use_cyclic_u else 1)
             else:
-                vertices = keepOuter
+                vertices = vertices[:i] + [intersection] + vertices[j:]
             j = i+2
         i += 1
 
-    return addPolygon(vertices, None, spline.use_cyclic_u)
+    new_area = areaOfPolygon(vertices)
+    return vertices if original_area*new_area > 0 else []
