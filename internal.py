@@ -627,3 +627,110 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
 
     new_area = areaOfPolygon(vertices)
     return vertices if original_area*new_area > 0 else []
+
+def bezierBooleanGeometry(splineA, splineB, operation):
+    if not splineA.use_cyclic_u or not splineB.use_cyclic_u:
+        return False
+    segmentsA = bezierSegments([splineA], False)
+    segmentsB = bezierSegments([splineB], False)
+
+    deletionFlagA = isPointInSpline(splineA.bezier_points[0].co, splineB)
+    deletionFlagB = isPointInSpline(splineB.bezier_points[0].co, splineA)
+    if operation == 'DIFFERENCE':
+        deletionFlagB = not deletionFlagB
+    elif operation == 'INTERSECTION':
+        deletionFlagA = not deletionFlagA
+        deletionFlagB = not deletionFlagB
+    elif operation != 'UNION':
+        return False
+
+    intersections = []
+    for segmentA in segmentsA:
+        for segmentB in segmentsB:
+            intersections.extend(bezierIntersection(segmentA, segmentB))
+    if len(intersections) == 0:
+        if deletionFlagA:
+            bpy.context.object.data.splines.remove(splineA)
+        if deletionFlagB:
+            bpy.context.object.data.splines.remove(splineB)
+        return True
+
+    cleanupBezierIntersections(segmentsA)
+    cleanupBezierIntersections(segmentsB)
+    subdivideBezierSegmentsOfSameSpline(segmentsA)
+    subdivideBezierSegmentsOfSameSpline(segmentsB)
+
+    def collectCuts(cuts, segments, deletionFlag):
+        for segmentIndex, segment in enumerate(segments):
+            if 'extraCut' in segment:
+                deletionFlag = not deletionFlag
+                segment['extraCut']['index'] = segment['beginIndex']
+                segment['extraCut']['deletionFlag'] = deletionFlag
+                cuts.append(segment['extraCut'])
+            else:
+                cuts.append(None)
+            cuts.extend(segments[segmentIndex]['cuts'])
+            segment['deletionFlag'] = deletionFlag
+            for cutIndex, cut in enumerate(segment['cuts']):
+                deletionFlag = not deletionFlag
+                cut['deletionFlag'] = deletionFlag
+    cutsA = []
+    cutsB = []
+    collectCuts(cutsA, segmentsA, deletionFlagA)
+    collectCuts(cutsB, segmentsB, deletionFlagB)
+
+    beginIndex = 0
+    for segment in segmentsA:
+        if segment['deletionFlag'] == False:
+            beginIndex = segment['beginIndex']
+            break
+        for cut in segment['cuts']:
+            if cut['deletionFlag'] == False:
+                beginIndex = cut['index']
+                break
+
+    cuts = cutsA
+    spline = splineA
+    index = beginIndex
+    backward = False
+    newPoints = []
+    while True:
+        current = spline.bezier_points[index]
+        newPoints.append(current)
+        if backward:
+            current.handle_left, current.handle_right = current.handle_right.copy(), current.handle_left.copy()
+        index += len(spline.bezier_points)-1 if backward else 1
+        index %= len(spline.bezier_points)
+        if spline == splineA and index == beginIndex:
+            break
+
+        cut = cuts[index]
+        if cut != None:
+            current = spline.bezier_points[index]
+            current_handle = current.handle_right if backward else current.handle_left
+            spline = splineA if spline == splineB else splineB
+            cuts = cutsA if spline == splineA else cutsB
+            index = cut['otherCut']['index']
+            backward = cut['otherCut']['deletionFlag']
+            next = spline.bezier_points[index]
+            if backward:
+                next.handle_right = current_handle
+            else:
+                next.handle_left = current_handle
+            if spline == splineA and index == beginIndex:
+                break
+
+    newSpline = bpy.context.object.data.splines.new(type='BEZIER')
+    newSpline.use_cyclic_u = True
+    newSpline.bezier_points.add(len(newPoints)-1)
+    for index, newPoint in enumerate(newPoints):
+        newSpline.bezier_points[index].handle_left = newPoint.handle_left
+        newSpline.bezier_points[index].co = newPoint.co
+        newSpline.bezier_points[index].handle_right = newPoint.handle_right
+        newSpline.bezier_points[index].select_left_handle = True
+        newSpline.bezier_points[index].select_control_point = True
+        newSpline.bezier_points[index].select_right_handle = True
+    bpy.context.object.data.splines.remove(splineA)
+    bpy.context.object.data.splines.remove(splineB)
+    bpy.context.object.data.splines.active = newSpline
+    return True

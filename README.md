@@ -3,30 +3,39 @@
 
 
 
-## Edit Operators
+## Specials > Bezier CAD
 
-### Bezier Intersection
+### Boolean
+Select exactly two bezier splines to combine their area into a new one by union, intersection or difference.
+
+### Intersection
 Select at least two segments to split them at their intersections.
 
-### Bezier Merge Ends
+### Merge Ends
 Merges two end control points into one while preserving the relative positions of their handles.
 
-### Bezier Subdivide
+### Subdivide
 Blender only allows for uniform subdivision.
 This operator enables you to select multiple segments and split them at custom parameters simultaneously.
 
-### Bezier Offset
-Adds poly traces with a defined offset to the selected bezier spline (all connected segments).
-
-### Bezier Circle
+### Circle
 Add a bezier circle which completes the selected segment into a full circle.
 
-### Bezier Length
+### Length
 Measures the arc length of the selected bezier segments.
 
 
 
-## Export Operator
+## Add > Toolpath
+
+### Offset Curve
+Creates a toolpath with a defined offset to the selected splines.
+
+
+
+## File > Export
+
+### SVG
 - Fills and Colors
 - Selection Only / All Visible
 - Viewport Projection / Local Orthographic Projection

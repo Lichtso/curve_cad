@@ -19,6 +19,32 @@
 import bpy
 from . import internal
 
+class Boolean(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_boolean'
+    bl_description = bl_label = 'Boolean'
+    bl_options = {'REGISTER', 'UNDO'}
+    operation = bpy.props.EnumProperty(name='Type', items=[
+        ('UNION', 'Union', 'Boolean OR', 0),
+        ('INTERSECTION', 'Intersection', 'Boolean AND', 1),
+        ('DIFFERENCE', 'Difference', 'Active minus Selected', 2)
+    ])
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        splines = internal.bezierSelectedSplines(True, False)
+        if len(splines) != 2:
+            self.report({'WARNING'}, 'Invalid selection')
+            return {'CANCELLED'}
+        splineA = bpy.context.object.data.splines.active
+        splineB = splines[0] if (splines[1] == splineA) else splines[1]
+        if not internal.bezierBooleanGeometry(splineA, splineB, self.operation):
+            self.report({'WARNING'}, 'Invalid selection')
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
 class Intersection(bpy.types.Operator):
     bl_idname = 'curve.bezier_cad_intersection'
     bl_description = bl_label = 'Intersection'
@@ -157,4 +183,4 @@ class Length(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [Intersection, MergeEnds, Subdivide, Circle, Length]
+operators = [Boolean, Intersection, MergeEnds, Subdivide, Circle, Length]
