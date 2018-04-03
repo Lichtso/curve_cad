@@ -626,7 +626,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
         i += 1
 
     new_area = areaOfPolygon(vertices)
-    return vertices if original_area*new_area > 0 else []
+    return vertices if original_area*new_area >= 0 else []
 
 def bezierBooleanGeometry(splineA, splineB, operation):
     if not splineA.use_cyclic_u or not splineB.use_cyclic_u:

@@ -46,7 +46,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
             position = self.transform*Vector((position[0], position[1], position[2], 1.0))
             position *= 0.5/position.w
         ref_position = self.origin if self.absolute_coordinates else self.ref_position
-        command = '{},{}'.format((position[0]-ref_position[0])*self.scale[0], (position[1]-ref_position[1])*self.scale[1])
+        command = '{:.3f},{:.3f}'.format((position[0]-ref_position[0])*self.scale[0], (position[1]-ref_position[1])*self.scale[1])
         if update_ref_position:
             self.ref_position = position
         return command
@@ -98,7 +98,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
                     style = Vector(obj.data.materials[spline.material_index].diffuse_color)*255
                 else:
                     style = Vector((0.8, 0.8, 0.8))*255
-                style = 'rgb({0},{1},{2})'.format(round(style[0]), round(style[1]), round(style[2]))
+                style = 'rgb({},{},{})'.format(round(style[0]), round(style[1]), round(style[2]))
             if style in styles:
                 styles[style].append(spline)
             else:
@@ -157,7 +157,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
 
         self.scale[1] *= -1
         with open(self.filepath, 'w') as f:
-            svg_view = ('' if self.unit_name == '-' else 'width="{0}{2}" height="{1}{2}" ')+'viewBox="0 0 {0} {1}">\n'
+            svg_view = ('' if self.unit_name == '-' else 'width="{0:.3f}{2}" height="{1:.3f}{2}" ')+'viewBox="0 0 {0:.3f} {1:.3f}">\n'
             f.write('''<?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 <svg xmlns="http://www.w3.org/2000/svg" '''+svg_view.format(self.bounds[0], self.bounds[1], self.unit_name))
@@ -167,4 +167,76 @@ class svgExport(bpy.types.Operator, ExportHelper):
 
         return {'FINISHED'}
 
-operators = [svgExport]
+class gCodeExport(bpy.types.Operator, ExportHelper):
+    bl_idname = 'export_gcode_format.gcode'
+    bl_description = bl_label = 'Toolpath (.gcode)'
+    filename_ext = '.gcode'
+
+    speed = bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
+    max_angle = bpy.props.FloatProperty(name='Resolution', description='Maximal angle used when converting bezier curves into polygons', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    local_coordinates = bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
+    detect_circles = bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles as G02 and G03')
+
+    def execute(self, context):
+        object = bpy.context.scene.objects.active
+        if object.type != 'CURVE' or len(object.data.splines) != 1 or object.data.splines[0].use_cyclic_u:
+            self.report({'WARNING'}, 'Invalid Selection')
+            return {'CANCELLED'}
+        self.scale = Vector((1, 1, 1))
+        self.scale *= context.scene.unit_settings.scale_length*1000.0
+        with open(self.filepath, 'w') as f:
+            f.write('G21\n') # Length is measured in millimeters
+            spline = object.data.splines[0]
+            if spline.use_cyclic_u:
+                return gcode
+            def transform(position):
+                result = Vector((position[0]*self.scale[0], position[1]*self.scale[1], position[2]*self.scale[2])) # , 1.0
+                return result if self.local_coordinates else object.matrix_world*result
+            points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
+            prevSpeed = -1
+            for index, current in enumerate(points):
+                speed = self.speed*max(0.0, min(current.weight_softbody, 1.0))
+                if speed != prevSpeed:
+                    f.write('F{:.3f}\n'.format(speed))
+                    prevSpeed = speed
+                speed_code = 'G00' if current.weight_softbody == 1.0 else 'G01'
+                prev = points[index-1]
+                linear = spline.type != 'BEZIER' or index == 0 or (prev.handle_right_type == 'VECTOR' and current.handle_left_type == 'VECTOR')
+                position = transform(current.co)
+                if linear:
+                    f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
+                else:
+                    points = internal.bezierSegmentPoints(prev, current)
+                    circle = None
+                    if self.detect_circles:
+                        circle = internal.circleOfBezier(points)
+                        if circle:
+                            tollerance = 0.001
+                            if abs(circle.plane.normal[0]) > 1.0-tollerance:
+                                planeIndex = 19
+                                ccw = circle.plane.normal[0] > 0
+                            elif abs(circle.plane.normal[1]) > 1.0-tollerance:
+                                planeIndex = 18
+                                ccw = circle.plane.normal[1] > 0
+                            elif abs(circle.plane.normal[2]) > 1.0-tollerance:
+                                planeIndex = 17
+                                ccw = circle.plane.normal[2] > 0
+                            else:
+                                circle = None
+                            if circle:
+                                center = transform(circle.center-transform(prev.co))
+                                f.write('G{} G0{} I{:.3f} J{:.3f} K{:.3f} X{:.3f} Y{:.3f} Z{:.3f}\n'.format(planeIndex, 3 if ccw else 2, center[0], center[1], center[2], position[0], position[1], position[2]))
+                    if circle == None:
+                        bezier_samples = 128
+                        max_angle = math.pi/16
+                        prev_tangent = internal.bezierTangentAt(points, 0).normalized()
+                        for t in range(1, bezier_samples+1):
+                            t /= bezier_samples
+                            tangent = internal.bezierTangentAt(points, t).normalized()
+                            if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= self.max_angle:
+                                position = transform(internal.bezierPointAt(points, t))
+                                prev_tangent = tangent
+                                f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
+        return {'FINISHED'}
+
+operators = [svgExport, gCodeExport]

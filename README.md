@@ -35,10 +35,18 @@ Creates a toolpath with a defined offset to the selected splines.
 
 ## File > Export
 
-### SVG
+### SVG (for Laser Cutting)
 - Fills and Colors
 - Selection Only / All Visible
 - Viewport Projection / Local Orthographic Projection
 - Absolute / Relative Coords
 - SVG Path: Move To, Line To, Curve To, Close
 - Units
+
+### G-Code (for CNC Milling)
+Exports the active curve.
+It must contain exactly one spline / polygon which must be non cyclic.
+- Feed Rate: The "softbody goal weight" is used to encode this information per vertex
+- Seek: Fast movement
+- Line: Slow movement while cutting
+- Circle: Reconstructed from bezier curves
