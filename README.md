@@ -31,6 +31,12 @@ Measures the arc length of the selected bezier segments.
 ### Offset Curve
 Creates a toolpath with a defined offset to the selected splines.
 
+### Rect Macro
+Creates a toolpath for a rectangular area.
+
+### Drill Macro
+Creates a toolpath for a circular hole.
+
 
 
 ## File > Export

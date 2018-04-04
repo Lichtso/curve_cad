@@ -68,4 +68,94 @@ class OffsetCurve(bpy.types.Operator):
                 internal.addPolygon(bpy.context.object, vertices)
         return {'FINISHED'}
 
-operators = [OffsetCurve]
+class RectMacro(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_rect_macro'
+    bl_description = bl_label = 'Rect Macro'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    track_count = bpy.props.IntProperty(name='Number Tracks', description='How many tracks', min=1, default=10)
+    stride = bpy.props.FloatProperty(name='Stride', unit='LENGTH', description='Distance to previous track on the way back', min=0.0, default=0.5)
+    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two tracks', default=-1.0)
+    length = bpy.props.FloatProperty(name='Length', unit='LENGTH', description='Length of one track', default=10.0)
+    speed = bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
+
+    def execute(self, context):
+        if not internal.curveObject():
+            internal.addCurveObject('Toolpath').location = bpy.context.space_data.cursor_location
+            origin = Vector((0.0, 0.0, 0.0))
+        else:
+            origin = bpy.context.space_data.cursor_location
+
+        stride = math.copysign(self.stride, self.pitch)
+        length = self.length*0.5
+        vertices = []
+        weights = []
+        for i in range(0, self.track_count):
+            shift = i*self.pitch
+            flipped = -1 if (stride == 0 and i%2 == 1) else 1
+            vertices.append(origin+Vector((shift, -length*flipped, 0.0)))
+            weights.append(self.speed)
+            vertices.append(origin+Vector((shift, length*flipped, 0.0)))
+            weights.append(self.speed)
+            if stride != 0:
+                vertices.append(origin+Vector((shift-stride, length, 0.0)))
+                weights.append(self.speed)
+                vertices.append(origin+Vector((shift-stride, -length, 0.0)))
+                weights.append(1)
+        internal.addPolygon(bpy.context.object, vertices, weights)
+        return {'FINISHED'}
+
+class DrillMacro(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_drill_macro'
+    bl_description = bl_label = 'Drill Macro'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    screw_count = bpy.props.FloatProperty(name='Screw Turns', description='How many screw truns', min=1.0, default=10.0)
+    spiral_count = bpy.props.FloatProperty(name='Spiral Turns', description='How many spiral turns', min=0.0, default=0.0)
+    vertex_count = bpy.props.IntProperty(name='Number Vertices', description = 'How many vertices per screw turn', min=3, default=32)
+    radius = bpy.props.FloatProperty(name='Radius', unit='LENGTH', description='Radius at tool center', min=0.0, default=5.0)
+    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two screw turns', min=0.0, default=1.0)
+    speed = bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
+
+    def execute(self, context):
+        if not internal.curveObject():
+            internal.addCurveObject('Toolpath').location = bpy.context.space_data.cursor_location
+            origin = Vector((0.0, 0.0, 0.0))
+        else:
+            origin = bpy.context.space_data.cursor_location
+
+        count = int(self.vertex_count*self.screw_count)
+        height = -count/self.vertex_count*self.pitch
+        vertices = []
+        weights = []
+        def addRadialVertex(param, radius, height):
+            angle = param*math.pi*2
+            vertices.append(origin+Vector((math.sin(angle)*radius, math.cos(angle)*radius, height)))
+            weights.append(self.speed)
+        if self.radius > 0:
+            if self.spiral_count > 0.0:
+                sCount = math.ceil(self.spiral_count*self.vertex_count)
+                for j in range(1, int(self.screw_count)+1):
+                    if j > 1:
+                        vertices.append(origin+Vector((0.0, 0.0, sHeight)))
+                        weights.append(self.speed)
+                    sHeight = max(-j*self.pitch, height)
+                    for i in range(0, sCount+1):
+                        sParam = i/self.vertex_count
+                        addRadialVertex(sParam, i/sCount*self.radius, sHeight)
+                    for i in range(0, self.vertex_count+1):
+                        addRadialVertex(sParam+(count+i)/self.vertex_count, self.radius, sHeight)
+            else:
+                for i in range(0, count):
+                    param = i/self.vertex_count
+                    addRadialVertex(param, self.radius, -param*self.pitch)
+                for i in range(0, self.vertex_count+1):
+                    addRadialVertex((count+i)/self.vertex_count, self.radius, height)
+            weights += [1, 1]
+        else:
+            weights += [self.speed, 1]
+        vertices += [origin+Vector((0.0, 0.0, height)), origin]
+        internal.addPolygon(bpy.context.object, vertices, weights)
+        return {'FINISHED'}
+
+operators = [OffsetCurve, RectMacro, DrillMacro]
