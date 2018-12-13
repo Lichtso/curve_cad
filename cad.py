@@ -155,7 +155,7 @@ class Circle(bpy.types.Operator):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        circle = internal.circleOfBezier(segments[0]['points'])
+        circle = internal.circleOfBezier(internal.bezierSegmentPoints(segments[0]['beginPoint'], segments[0]['endPoint']))
         if circle == None:
             self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
@@ -179,7 +179,7 @@ class Length(bpy.types.Operator):
 
         length = 0
         for segment in segments:
-            length += internal.bezierLength(segment['points'])
+            length += internal.bezierLength(internal.bezierSegmentPoints(segment['beginPoint'], segment['endPoint']))
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
