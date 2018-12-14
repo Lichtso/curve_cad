@@ -20,6 +20,18 @@ import bpy, math, cmath
 from mathutils import Vector, Matrix
 from collections import namedtuple
 
+units = [
+    ('-', 'None', '1.0', 0),
+    ('px', 'Pixel', '1.0', 1),
+    ('m', 'Meter', '1.0', 2),
+    ('dm', 'Decimeter', '0.1', 3),
+    ('cm', 'Centimeter', '0.01', 4),
+    ('mm', 'Millimeter', '0.001', 5),
+    ('yd', 'Yard', '0.9144', 6),
+    ('ft', 'Foot', '0.3048', 7),
+    ('in', 'Inch', '0.0254', 8)
+]
+
 param_tollerance = 0.0001
 AABB = namedtuple('AxisAlignedBoundingBox', 'center dimensions')
 Plane = namedtuple('Plane', 'normal distance')
@@ -30,13 +42,13 @@ def nearestPointOfLines(originA, dirA, originB, dirB, tollerance=0.0):
     normal = dirA.cross(dirB)
     normalA = dirA.cross(normal)
     normalB = dirB.cross(normal)
-    divisorA = dirA*normalB
-    divisorB = dirB*normalA
+    divisorA = dirA@normalB
+    divisorB = dirB@normalA
     if abs(divisorA) <= tollerance or abs(divisorB) <= tollerance:
         return (float('nan'), float('nan'), originA, originB)
     else:
-        paramA = (originB-originA)*normalB/divisorA
-        paramB = (originA-originB)*normalA/divisorB
+        paramA = (originB-originA)@normalB/divisorA
+        paramB = (originA-originB)@normalA/divisorB
         return (paramA, paramB, originA+dirA*paramA, originB+dirB*paramB)
 
 def lineIntersection(beginA, endA, beginB, endB):
@@ -48,12 +60,9 @@ def lineIntersection(beginA, endA, beginB, endB):
     return (intersection[2]+intersection[3])*0.5
 
 def linePlaneIntersection(lineBegin, lineEnd, plane):
-    det = (lineEnd-lineBegin)*plane.normal
-    return float('nan') if det == 0 else (plane.distance-lineBegin*plane.normal)/det
-
-    # lineDiff = lineEnd-lineBegin
-    # det = lineDiff*plane.normal
-    # return float('nan') if det == 0 else (plane.normal*plane.distance-lineBegin)*plane.normal/det
+    det = (lineEnd-lineBegin)@plane.normal
+    return float('nan') if det == 0 else (plane.distance-lineBegin@plane.normal)/det
+    # return float('nan') if det == 0 else (plane.normal*plane.distance-lineBegin)@plane.normal/det
 
 def areaOfPolygon(vertices):
     area = 0
@@ -75,12 +84,12 @@ def circleOfTriangle(a, b, c):
     if lengthN == 0:
         return None
     factor = -1/(2*lengthN*lengthN)
-    alpha = (dirBA*dirAC)*(lengthCB*lengthCB*factor)
-    beta = (dirBA*dirCB)*(lengthAC*lengthAC*factor)
-    gamma = (dirAC*dirCB)*(lengthBA*lengthBA*factor)
+    alpha = (dirBA@dirAC)*(lengthCB*lengthCB*factor)
+    beta = (dirBA@dirCB)*(lengthAC*lengthAC*factor)
+    gamma = (dirAC@dirCB)*(lengthBA*lengthBA*factor)
     center = a*alpha+b*beta+c*gamma
     radius = (lengthBA*lengthCB*lengthAC)/(2*lengthN)
-    plane = Plane(normal=normal/lengthN, distance=center*normal)
+    plane = Plane(normal=normal/lengthN, distance=center@normal)
     return Circle(plane=plane, center=center, radius=radius)
 
 def circleOfBezier(points, tollerance=0.000001):
@@ -144,7 +153,7 @@ def bezierTangentAt(points, t):
 def bezierLength(points, beginT=0, endT=1, samples=1024):
     # https://en.wikipedia.org/wiki/Arc_length#Finding_arc_lengths_by_integrating
     vec = [points[1]-points[0], points[2]-points[1], points[3]-points[2]]
-    dot = [vec[0]*vec[0], vec[0]*vec[1], vec[0]*vec[2], vec[1]*vec[1], vec[1]*vec[2], vec[2]*vec[2]]
+    dot = [vec[0]@vec[0], vec[0]@vec[1], vec[0]@vec[2], vec[1]@vec[1], vec[1]@vec[2], vec[2]@vec[2]]
     factors = [
         dot[0],
         4*(dot[1]-dot[0]),
@@ -535,9 +544,9 @@ def addCurveObject(name):
     curve = bpy.data.curves.new(name=name, type='CURVE')
     curve.dimensions = '3D'
     obj = bpy.data.objects.new(name, curve)
-    obj.select = True
-    bpy.context.scene.objects.link(obj)
-    bpy.context.scene.objects.active = obj
+    bpy.context.scene.collection.objects.link(obj)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
     return obj
 
 def addPolygon(obj, vertices, weights=None, cyclic=False):
@@ -573,7 +582,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
             segment_points = [current.co.xyz, None, None, next.co.xyz]
             prev_tangent = (segment_points[0]-prev.co.xyz).normalized()
             current_tangent = next_tangent = (segment_points[3]-segment_points[0]).normalized()
-        angle = prev_tangent*current_tangent
+        angle = prev_tangent@current_tangent
         angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
 
         # Convex Round Cap
@@ -600,7 +609,7 @@ def offsetPolygonOfSpline(spline, distance, max_angle, bezier_samples=128):
             for t in range(1, bezier_samples+1):
                 t /= bezier_samples
                 tangent = bezierTangentAt(segment_points, t).normalized()
-                if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= max_angle:
+                if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= max_angle:
                     vertices.append(offsetVertex(bezierPointAt(segment_points, t), tangent)[1])
                     prev_tangent = tangent
 

@@ -23,7 +23,8 @@ class Boolean(bpy.types.Operator):
     bl_idname = 'curve.bezier_cad_boolean'
     bl_description = bl_label = 'Boolean'
     bl_options = {'REGISTER', 'UNDO'}
-    operation = bpy.props.EnumProperty(name='Type', items=[
+
+    operation: bpy.props.EnumProperty(name='Type', items=[
         ('UNION', 'Union', 'Boolean OR', 0),
         ('INTERSECTION', 'Intersection', 'Boolean AND', 1),
         ('DIFFERENCE', 'Difference', 'Active minus Selected', 2)

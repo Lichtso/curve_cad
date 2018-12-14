@@ -25,11 +25,11 @@ class OffsetCurve(bpy.types.Operator):
     bl_description = bl_label = 'Offset Curve'
     bl_options = {'REGISTER', 'UNDO'}
 
-    offset = bpy.props.FloatProperty(name='Offset', unit='LENGTH', default=0.1)
-    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', default=0.1)
-    max_angle = bpy.props.FloatProperty(name='Resolution', unit='ROTATION', min=math.pi/128, default=math.pi/16)
-    count = bpy.props.IntProperty(name='Count', min=1, default=1)
-    connect = bpy.props.BoolProperty(name='Connect')
+    offset: bpy.props.FloatProperty(name='Offset', description='Distace between the original and the first trace', unit='LENGTH', default=0.1)
+    pitch: bpy.props.FloatProperty(name='Pitch', description='Distace between two paralell traces', unit='LENGTH', default=0.1)
+    max_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make the curve smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    count: bpy.props.IntProperty(name='Count', description='Number of paralell traces', min=1, default=1)
+    connect: bpy.props.BoolProperty(name='Connect', description='Connects all traces if count > 1')
 
     @classmethod
     def poll(cls, context):
@@ -54,7 +54,7 @@ class OffsetCurve(bpy.types.Operator):
                 trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
                 if len(trace) == 0:
                     continue
-                if self.connect:
+                if self.connect and self.count > 1:
                     if spline.use_cyclic_u:
                         trace.append(trace[0])
                         vertices = trace+vertices
@@ -64,7 +64,7 @@ class OffsetCurve(bpy.types.Operator):
                         vertices = trace+vertices
                 else:
                     internal.addPolygon(bpy.context.object, trace, None, spline.use_cyclic_u)
-            if self.connect:
+            if self.connect and self.count > 1:
                 internal.addPolygon(bpy.context.object, vertices)
         return {'FINISHED'}
 
@@ -73,19 +73,18 @@ class RectMacro(bpy.types.Operator):
     bl_description = bl_label = 'Rect Macro'
     bl_options = {'REGISTER', 'UNDO'}
 
-    track_count = bpy.props.IntProperty(name='Number Tracks', description='How many tracks', min=1, default=10)
-    stride = bpy.props.FloatProperty(name='Stride', unit='LENGTH', description='Distance to previous track on the way back', min=0.0, default=0.5)
-    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two tracks', default=-1.0)
-    length = bpy.props.FloatProperty(name='Length', unit='LENGTH', description='Length of one track', default=10.0)
-    speed = bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
+    track_count: bpy.props.IntProperty(name='Number Tracks', description='How many tracks', min=1, default=10)
+    stride: bpy.props.FloatProperty(name='Stride', unit='LENGTH', description='Distance to previous track on the way back', min=0.0, default=0.5)
+    pitch: bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two tracks', default=-1.0)
+    length: bpy.props.FloatProperty(name='Length', unit='LENGTH', description='Length of one track', default=10.0)
+    speed: bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.space_data.cursor_location
+            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
             origin = Vector((0.0, 0.0, 0.0))
         else:
-            origin = bpy.context.space_data.cursor_location
-
+            origin = bpy.context.scene.cursor_location
         stride = math.copysign(self.stride, self.pitch)
         length = self.length*0.5
         vertices = []
@@ -110,20 +109,19 @@ class DrillMacro(bpy.types.Operator):
     bl_description = bl_label = 'Drill Macro'
     bl_options = {'REGISTER', 'UNDO'}
 
-    screw_count = bpy.props.FloatProperty(name='Screw Turns', description='How many screw truns', min=1.0, default=10.0)
-    spiral_count = bpy.props.FloatProperty(name='Spiral Turns', description='How many spiral turns', min=0.0, default=0.0)
-    vertex_count = bpy.props.IntProperty(name='Number Vertices', description = 'How many vertices per screw turn', min=3, default=32)
-    radius = bpy.props.FloatProperty(name='Radius', unit='LENGTH', description='Radius at tool center', min=0.0, default=5.0)
-    pitch = bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two screw turns', min=0.0, default=1.0)
-    speed = bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
+    screw_count: bpy.props.FloatProperty(name='Screw Turns', description='How many screw truns', min=1.0, default=10.0)
+    spiral_count: bpy.props.FloatProperty(name='Spiral Turns', description='How many spiral turns', min=0.0, default=0.0)
+    vertex_count: bpy.props.IntProperty(name='Number Vertices', description = 'How many vertices per screw turn', min=3, default=32)
+    radius: bpy.props.FloatProperty(name='Radius', unit='LENGTH', description='Radius at tool center', min=0.0, default=5.0)
+    pitch: bpy.props.FloatProperty(name='Pitch', unit='LENGTH', description='Distance between two screw turns', min=0.0, default=1.0)
+    speed: bpy.props.FloatProperty(name='Speed', description='Stored in softbody goal weight', min=0.0, max=1.0, default=0.1)
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.space_data.cursor_location
+            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
             origin = Vector((0.0, 0.0, 0.0))
         else:
-            origin = bpy.context.space_data.cursor_location
-
+            origin = bpy.context.scene.cursor_location
         count = int(self.vertex_count*self.screw_count)
         height = -count/self.vertex_count*self.pitch
         vertices = []

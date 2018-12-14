@@ -19,31 +19,21 @@
 import bpy, math
 from mathutils import Vector, Matrix
 from bpy_extras.io_utils import ExportHelper
-units = [
-    ('-', 'None', '1.0', 0),
-    ('px', 'Pixel', '1.0', 1),
-    ('m', 'Meter', '1.0', 2),
-    ('dm', 'Decimeter', '0.1', 3),
-    ('cm', 'Centimeter', '0.01', 4),
-    ('mm', 'Millimeter', '0.001', 5),
-    ('yd', 'Yard', '0.9144', 6),
-    ('ft', 'Foot', '0.3048', 7),
-    ('in', 'Inch', '0.0254', 8)
-]
+from . import internal
 
 class svgExport(bpy.types.Operator, ExportHelper):
     bl_idname = 'export_svg_format.svg'
     bl_description = bl_label = 'Curves (.svg)'
     filename_ext = '.svg'
 
-    selection_only = bpy.props.BoolProperty(name='Selection only', description='instead of exporting all visible curves')
-    absolute_coordinates = bpy.props.BoolProperty(name='Absolute coordinates', description='instead of relative coordinates')
-    viewport_projection = bpy.props.BoolProperty(name='Viewport projection', description='WYSIWYG instead of an local orthographic projection')
-    unit_name = bpy.props.EnumProperty(name='Unit', items=units, default='mm')
+    selection_only: bpy.props.BoolProperty(name='Selection only', description='instead of exporting all visible curves')
+    absolute_coordinates: bpy.props.BoolProperty(name='Absolute coordinates', description='instead of relative coordinates')
+    viewport_projection: bpy.props.BoolProperty(name='Viewport projection', description='WYSIWYG instead of an local orthographic projection')
+    unit_name: bpy.props.EnumProperty(name='Unit', items=internal.units, default='mm')
 
     def serialize_point(self, position, update_ref_position=True):
         if self.transform:
-            position = self.transform*Vector((position[0], position[1], position[2], 1.0))
+            position = self.transform@Vector((position[0], position[1], position[2], 1.0))
             position *= 0.5/position.w
         ref_position = self.origin if self.absolute_coordinates else self.ref_position
         command = '{:.3f},{:.3f}'.format((position[0]-ref_position[0])*self.scale[0], (position[1]-ref_position[1])*self.scale[1])
@@ -83,7 +73,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
 
     def serialize_object(self, obj):
         if self.area:
-            self.transform = self.area.spaces.active.region_3d.perspective_matrix*obj.matrix_world
+            self.transform = self.area.spaces.active.region_3d.perspective_matrix@obj.matrix_world
             self.origin = Vector((-0.5, 0.5, 0, 0))
         else:
             self.transform = None
@@ -148,7 +138,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
                 self.bounds[0] = max(self.bounds[0], obj.bound_box[7][0]-obj.bound_box[0][0])
                 self.bounds[1] = max(self.bounds[1], obj.bound_box[7][1]-obj.bound_box[0][1])
             self.scale = Vector((1, 1, 0))
-            for unit in units:
+            for unit in internal.units:
                 if self.unit_name == unit[0]:
                     self.scale *= 1.0/float(unit[2])
                     break
@@ -172,26 +162,27 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
     bl_description = bl_label = 'Toolpath (.gcode)'
     filename_ext = '.gcode'
 
-    speed = bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
-    max_angle = bpy.props.FloatProperty(name='Resolution', description='Maximal angle used when converting bezier curves into polygons', unit='ROTATION', min=math.pi/128, default=math.pi/16)
-    local_coordinates = bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
-    detect_circles = bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles as G02 and G03')
+    speed: bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
+    max_angle: bpy.props.FloatProperty(name='Resolution', description='Maximal angle used when converting bezier curves into polygons', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    local_coordinates: bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
+    detect_circles: bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles as G02 and G03') # TODO: Detect polygon circles too
+
+    @classmethod
+    def poll(cls, context):
+        obj = bpy.context.object
+        return obj != None and obj.type == 'CURVE' and len(obj.data.splines) == 1 and not obj.data.splines[0].use_cyclic_u
 
     def execute(self, context):
-        object = bpy.context.scene.objects.active
-        if object.type != 'CURVE' or len(object.data.splines) != 1 or object.data.splines[0].use_cyclic_u:
-            self.report({'WARNING'}, 'Invalid Selection')
-            return {'CANCELLED'}
         self.scale = Vector((1, 1, 1))
         self.scale *= context.scene.unit_settings.scale_length*1000.0
         with open(self.filepath, 'w') as f:
             f.write('G21\n') # Length is measured in millimeters
-            spline = object.data.splines[0]
+            spline = bpy.context.object.data.splines[0]
             if spline.use_cyclic_u:
                 return gcode
             def transform(position):
                 result = Vector((position[0]*self.scale[0], position[1]*self.scale[1], position[2]*self.scale[2])) # , 1.0
-                return result if self.local_coordinates else object.matrix_world*result
+                return result if self.local_coordinates else bpy.context.object.matrix_world@result
             points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
             prevSpeed = -1
             for index, current in enumerate(points):
@@ -233,7 +224,7 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
                         for t in range(1, bezier_samples+1):
                             t /= bezier_samples
                             tangent = internal.bezierTangentAt(points, t).normalized()
-                            if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= self.max_angle:
+                            if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= self.max_angle:
                                 position = transform(internal.bezierPointAt(points, t))
                                 prev_tangent = tangent
                                 f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
