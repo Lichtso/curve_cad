@@ -35,10 +35,11 @@ class Boolean(bpy.types.Operator):
         return internal.curveObject()
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(True, False)
+        splines = internal.bezierSelectedSplines(True, True)
         if len(splines) != 2:
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
+        bpy.ops.curve.spline_type_set(type='BEZIER')
         splineA = bpy.context.object.data.splines.active
         splineB = splines[0] if (splines[1] == splineA) else splines[1]
         if not internal.bezierBooleanGeometry(splineA, splineB, self.operation):
