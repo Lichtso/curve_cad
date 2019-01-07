@@ -121,11 +121,11 @@ class Subdivide(bpy.types.Operator):
     bl_description = bl_label = 'Subdivide'
     bl_options = {'REGISTER', 'UNDO'}
 
+    params: bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
+
     @classmethod
     def poll(cls, context):
         return internal.curveObject()
-
-    params = bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
 
     def execute(self, context):
         segments = internal.bezierSegments(bpy.context.object.data.splines, True)

@@ -279,9 +279,7 @@ def isPointInSpline(point, spline):
     return spline.use_cyclic_u and len(xRaySplineIntersectionTest(spline, point))%2 == 1
 
 def isSegmentLinear(points, tollerance=0.0001):
-    points = [Vector(points[0]), Vector(points[1]), Vector(points[2]), Vector(points[3])]
-    diffs = [points[1]-points[0], points[2]-points[1], points[3]-points[2]]
-    return (diffs[0]-diffs[1]).length < tollerance and (diffs[1]-diffs[2]).length < tollerance
+    return 1.0-(points[1]-points[0]).normalized()@(points[3]-points[2]).normalized() < tollerance
 
 def bezierSegmentPoints(begin, end):
     return [begin.co, begin.handle_right, end.handle_left, end.co]
