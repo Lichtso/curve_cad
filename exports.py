@@ -163,7 +163,7 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
     filename_ext = '.gcode'
 
     speed: bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
-    max_angle: bpy.props.FloatProperty(name='Resolution', description='Maximal angle used when converting bezier curves into polygons', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     local_coordinates: bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
     detect_circles: bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles as G02 and G03') # TODO: Detect polygon circles too
 
@@ -219,12 +219,11 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
                                 f.write('G{} G0{} I{:.3f} J{:.3f} K{:.3f} X{:.3f} Y{:.3f} Z{:.3f}\n'.format(planeIndex, 3 if ccw else 2, center[0], center[1], center[2], position[0], position[1], position[2]))
                     if circle == None:
                         bezier_samples = 128
-                        max_angle = math.pi/16
                         prev_tangent = internal.bezierTangentAt(points, 0).normalized()
                         for t in range(1, bezier_samples+1):
                             t /= bezier_samples
                             tangent = internal.bezierTangentAt(points, t).normalized()
-                            if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= self.max_angle:
+                            if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= self.step_angle:
                                 position = transform(internal.bezierPointAt(points, t))
                                 prev_tangent = tangent
                                 f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))

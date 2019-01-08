@@ -27,7 +27,7 @@ class OffsetCurve(bpy.types.Operator):
 
     offset: bpy.props.FloatProperty(name='Offset', description='Distace between the original and the first trace', unit='LENGTH', default=0.1)
     pitch: bpy.props.FloatProperty(name='Pitch', description='Distace between two paralell traces', unit='LENGTH', default=0.1)
-    max_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make the curve smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     count: bpy.props.IntProperty(name='Count', description='Number of paralell traces', min=1, default=1)
     connect: bpy.props.BoolProperty(name='Connect', description='Connects all traces if count > 1')
 
@@ -51,7 +51,7 @@ class OffsetCurve(bpy.types.Operator):
         for spline in splines:
             vertices = []
             for index in range(0, self.count):
-                trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.max_angle)
+                trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.step_angle)
                 if len(trace) == 0:
                     continue
                 if self.connect and self.count > 1:
@@ -63,9 +63,9 @@ class OffsetCurve(bpy.types.Operator):
                             trace = list(reversed(trace))
                         vertices = trace+vertices
                 else:
-                    internal.addPolygon(bpy.context.object, trace, None, spline.use_cyclic_u)
+                    internal.addPolygonSpline(bpy.context.object, spline.use_cyclic_u, trace)
             if self.connect and self.count > 1:
-                internal.addPolygon(bpy.context.object, vertices)
+                internal.addPolygonSpline(bpy.context.object, False, vertices)
         return {'FINISHED'}
 
 class RectMacro(bpy.types.Operator):
@@ -101,7 +101,7 @@ class RectMacro(bpy.types.Operator):
                 weights.append(self.speed)
                 vertices.append(origin+Vector((shift-stride, -length, 0.0)))
                 weights.append(1)
-        internal.addPolygon(bpy.context.object, vertices, weights)
+        internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
 class DrillMacro(bpy.types.Operator):
@@ -153,7 +153,7 @@ class DrillMacro(bpy.types.Operator):
         else:
             weights += [self.speed, 1]
         vertices += [origin+Vector((0.0, 0.0, height)), origin]
-        internal.addPolygon(bpy.context.object, vertices, weights)
+        internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
 operators = [OffsetCurve, RectMacro, DrillMacro]
