@@ -36,6 +36,10 @@ class OffsetCurve(bpy.types.Operator):
         return bpy.context.object != None and bpy.context.object.type == 'CURVE'
 
     def execute(self, context):
+        if bpy.context.object.data.dimensions != '2D':
+            self.report({'WARNING'}, 'Can only be applied in 2D')
+            return {'CANCELLED'}
+
         if bpy.context.object.mode == 'EDIT':
             splines = internal.bezierSelectedSplines(True, True)
         else:

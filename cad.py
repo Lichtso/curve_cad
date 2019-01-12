@@ -19,9 +19,9 @@
 import bpy
 from . import internal
 
-class Filleting(bpy.types.Operator):
-    bl_idname = 'curve.bezier_cad_filleting'
-    bl_description = bl_label = 'Filleting'
+class Fillet(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_fillet'
+    bl_description = bl_label = 'Fillet'
     bl_options = {'REGISTER', 'UNDO'}
 
     radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', default=0.1)
@@ -55,6 +55,9 @@ class Boolean(bpy.types.Operator):
         return internal.curveObject()
 
     def execute(self, context):
+        if bpy.context.object.data.dimensions != '2D':
+            self.report({'WARNING'}, 'Can only be applied in 2D')
+            return {'CANCELLED'}
         splines = internal.bezierSelectedSplines(True, True)
         if len(splines) != 2:
             self.report({'WARNING'}, 'Invalid selection')
@@ -205,4 +208,4 @@ class Length(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [Filleting, Boolean, Intersection, MergeEnds, Subdivide, Circle, Length]
+operators = [Fillet, Boolean, Intersection, MergeEnds, Subdivide, Circle, Length]

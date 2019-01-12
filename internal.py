@@ -590,7 +590,12 @@ def polygonArcAt(center, radius, begin_angle, angle, step_angle, include_ends):
         vertices.append(center+normal*radius)
     return vertices
 
-def bezierArcAt(center, radius, begin_angle, angle):
+def bezierArcAt(tangent, normal, center, radius, angle):
+    transform = Matrix.Identity(4)
+    transform.col[0].xyz = tangent.cross(normal)*radius
+    transform.col[1].xyz = tangent*radius
+    transform.col[2].xyz = normal*radius
+    transform.col[3].xyz = center
     segments = []
     segment_count = math.ceil(abs(angle)/(math.pi*0.5))
     angle /= segment_count
@@ -605,13 +610,9 @@ def bezierArcAt(center, radius, begin_angle, angle):
         Vector((x0, y0, 0))
     ]
     for i in range(0, segment_count):
-        transform = Matrix.Rotation(begin_angle+(i+0.5)*angle, 4, 'Z')
-        segments.append(list(map(lambda v: transform@v*radius+center, points)))
+        rotation = Matrix.Rotation((i+0.5)*angle, 4, 'Z')
+        segments.append(list(map(lambda v: transform@(rotation@v), points)))
     return segments
-
-def offsetVertex(position, tangent, distance):
-    normal = Vector((-tangent[1], tangent[0], 0))
-    return (normal, position+normal*distance)
 
 def iterateSpline(spline, callback):
     spline_points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
@@ -628,33 +629,37 @@ def iterateSpline(spline, callback):
             segment_points = [current.co.xyz, None, None, next.co.xyz]
             prev_tangent = (segment_points[0]-prev.co.xyz).normalized()
             current_tangent = next_tangent = (segment_points[3]-segment_points[0]).normalized()
-        sign = math.copysign(1, prev_tangent.cross(current_tangent)[2])
+        normal = prev_tangent.cross(current_tangent).normalized()
         angle = prev_tangent@current_tangent
         angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
         is_first = (index == 0) and not spline.use_cyclic_u
         is_last = (index == len(spline_points)-1) and not spline.use_cyclic_u
-        callback(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, sign, angle, is_first, is_last)
+        callback(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last)
     return spline_points
 
 def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
+    def offsetVertex(position, tangent):
+        normal = Vector((-tangent[1], tangent[0], 0))
+        return position+normal*offset
     vertices = []
-    def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, sign, angle, is_first, is_last):
+    def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last):
+        sign = math.copysign(1, normal[2])
         if is_last:
             return
         if angle != 0 and not is_first and sign != math.copysign(1, offset): # Convex Round Cap
             begin_angle = math.atan2(prev_tangent[1], prev_tangent[0])+math.pi*0.5
             vertices.extend(polygonArcAt(segment_points[0], offset, begin_angle, math.copysign(angle, sign), step_angle, False))
         if angle != 0 or is_first:
-            vertices.append(offsetVertex(segment_points[0], current_tangent, offset)[1])
+            vertices.append(offsetVertex(segment_points[0], current_tangent))
         if spline.type != 'BEZIER' or (current.handle_right_type == 'VECTOR' and next.handle_left_type == 'VECTOR'):
-            vertices.append(offsetVertex(segment_points[3], next_tangent, offset)[1])
+            vertices.append(offsetVertex(segment_points[3], next_tangent))
         else: # Trace Bezier Segment
             prev_tangent = bezierTangentAt(segment_points, 0).normalized()
             for t in range(1, bezier_samples+1):
                 t /= bezier_samples
                 tangent = bezierTangentAt(segment_points, t).normalized()
                 if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= step_angle:
-                    vertices.append(offsetVertex(bezierPointAt(segment_points, t), tangent, offset)[1])
+                    vertices.append(offsetVertex(bezierPointAt(segment_points, t), tangent))
                     prev_tangent = tangent
     spline_points = iterateSpline(spline, handlePoint)
 
@@ -683,8 +688,10 @@ def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
     return vertices if original_area*new_area >= 0 else []
 
 def filletSpline(spline, radius):
+    def offsetVertex(position, normal, tangent, distance):
+        return position+normal.cross(tangent)*distance
     vertices = []
-    def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, sign, angle, is_first, is_last):
+    def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last):
         prev_handle = current.co.xyz if is_first else current.handle_left.xyz if spline.type == 'BEZIER' else prev.co.xyz
         next_handle = current.co.xyz if is_last else current.handle_right.xyz if spline.type == 'BEZIER' else next.co.xyz
         distance = min((prev.co-current.co).length*0.5, (current.co-next.co).length*0.5)
@@ -694,10 +701,9 @@ def filletSpline(spline, radius):
             return
         offset = min(radius, distance/math.tan(angle*0.5))
         distance = offset*math.tan(angle*0.5)
-        begin_normal, begin_point = offsetVertex(current.co.xyz, prev_tangent*sign, offset)
-        begin_angle = math.atan2(-begin_normal[1], -begin_normal[0])
+        begin_point = offsetVertex(current.co.xyz, normal, prev_tangent, offset)
         circle_center = begin_point-prev_tangent*distance
-        segments = bezierArcAt(circle_center, offset, begin_angle, math.copysign(angle, sign))
+        segments = bezierArcAt(prev_tangent, normal, circle_center, offset, angle)
         for i in range(0, len(segments)+1):
             vertices.append([
                 segments[i-1][2] if i > 0 else prev.co.xyz,
