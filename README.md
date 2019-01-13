@@ -5,6 +5,9 @@
 
 ## Specials > Bezier CAD
 
+### Fillet
+Select spline points to round them by inserting arcs. Only works on corners between straight lines with handle type "vector".
+
 ### Boolean
 Select exactly two bezier splines to combine their area into a new one by union, intersection or difference.
 

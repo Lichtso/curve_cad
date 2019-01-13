@@ -31,7 +31,7 @@ class Fillet(bpy.types.Operator):
         return internal.curveObject()
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(True, True)
+        splines = internal.bezierSelectedSplines(True, True, True)
         if len(splines) == 0:
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}

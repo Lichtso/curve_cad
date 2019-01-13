@@ -522,22 +522,28 @@ def bezierSegments(splines, selection_only):
                 })
     return segments
 
-def bezierSelectedSplines(includeBezier, includePolygon):
+def bezierSelectedSplines(include_bezier, include_polygon, allow_partial_selection=False):
     result = []
     for spline in bpy.context.object.data.splines:
-        selected = False
-        if spline.type == 'BEZIER' and includeBezier:
-            selected = True
+        selected = not allow_partial_selection
+        if spline.type == 'BEZIER':
+            if not include_bezier:
+                continue
             for index, point in enumerate(spline.bezier_points):
-                if not point.select_left_handle or not point.select_control_point or not point.select_right_handle:
-                    selected = False
+                if point.select_left_handle == allow_partial_selection or \
+                   point.select_control_point == allow_partial_selection or \
+                   point.select_right_handle == allow_partial_selection:
+                    selected = allow_partial_selection
                     break
-        if spline.type == 'POLY' and includePolygon:
-            selected = True
+        elif spline.type == 'POLY':
+            if not include_polygon:
+                continue
             for index, point in enumerate(spline.points):
-                if not point.select:
-                    selected = False
+                if point.select == allow_partial_selection:
+                    selected = allow_partial_selection
                     break
+        else:
+            continue
         if selected:
             result.append(spline)
     return result
@@ -688,21 +694,18 @@ def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
     return vertices if original_area*new_area >= 0 else []
 
 def filletSpline(spline, radius):
-    def offsetVertex(position, normal, tangent, distance):
-        return position+normal.cross(tangent)*distance
     vertices = []
     def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last):
         prev_handle = current.co.xyz if is_first else current.handle_left.xyz if spline.type == 'BEZIER' else prev.co.xyz
         next_handle = current.co.xyz if is_last else current.handle_right.xyz if spline.type == 'BEZIER' else next.co.xyz
         distance = min((prev.co-current.co).length*0.5, (current.co-next.co).length*0.5)
-        if is_first or is_last or angle == 0 or distance == 0 or \
+        if not current.select or is_first or is_last or angle == 0 or distance == 0 or \
            (spline.type == 'BEZIER' and (current.handle_left_type != 'VECTOR' or current.handle_right_type != 'VECTOR')):
             vertices.append([prev_handle, current.co.xyz, next_handle])
             return
         offset = min(radius, distance/math.tan(angle*0.5))
         distance = offset*math.tan(angle*0.5)
-        begin_point = offsetVertex(current.co.xyz, normal, prev_tangent, offset)
-        circle_center = begin_point-prev_tangent*distance
+        circle_center = current.co.xyz+normal.cross(prev_tangent)*offset-prev_tangent*distance
         segments = bezierArcAt(prev_tangent, normal, circle_center, offset, angle)
         for i in range(0, len(segments)+1):
             vertices.append([
@@ -711,8 +714,9 @@ def filletSpline(spline, radius):
                 segments[i][1] if i < len(segments) else next.co.xyz
             ])
     spline_points = iterateSpline(spline, handlePoint)
-    addBezierSpline(bpy.context.object, spline.use_cyclic_u, vertices)
+    new_spline = addBezierSpline(bpy.context.object, spline.use_cyclic_u, vertices)
     bpy.context.object.data.splines.remove(spline)
+    return new_spline
 
 def bezierBooleanGeometry(splineA, splineB, operation):
     if not splineA.use_cyclic_u or not splineB.use_cyclic_u:
