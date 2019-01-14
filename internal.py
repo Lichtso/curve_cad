@@ -699,7 +699,8 @@ def filletSpline(spline, radius):
         prev_handle = current.co.xyz if is_first else current.handle_left.xyz if spline.type == 'BEZIER' else prev.co.xyz
         next_handle = current.co.xyz if is_last else current.handle_right.xyz if spline.type == 'BEZIER' else next.co.xyz
         distance = min((prev.co-current.co).length*0.5, (current.co-next.co).length*0.5)
-        if not current.select or is_first or is_last or angle == 0 or distance == 0 or \
+        selected = current.select_control_point if spline.type == 'BEZIER' else current.select
+        if not selected or is_first or is_last or angle == 0 or distance == 0 or \
            (spline.type == 'BEZIER' and (current.handle_left_type != 'VECTOR' or current.handle_right_type != 'VECTOR')):
             vertices.append([prev_handle, current.co.xyz, next_handle])
             return
