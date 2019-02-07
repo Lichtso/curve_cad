@@ -36,10 +36,6 @@ class OffsetCurve(bpy.types.Operator):
         return bpy.context.object != None and bpy.context.object.type == 'CURVE'
 
     def execute(self, context):
-        if bpy.context.object.data.dimensions != '2D':
-            self.report({'WARNING'}, 'Can only be applied in 2D')
-            return {'CANCELLED'}
-
         if bpy.context.object.mode == 'EDIT':
             splines = internal.bezierSelectedSplines(True, True)
         else:
@@ -53,6 +49,11 @@ class OffsetCurve(bpy.types.Operator):
             internal.addCurveObject('Toolpath')
 
         for spline in splines:
+            spline_points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
+            for spline_point in spline_points:
+                if spline_point.co.z != spline_points[0].co.z:
+                    self.report({'WARNING'}, 'Curves must be planar and in XY plane')
+                    return {'CANCELLED'}
             vertices = []
             for index in range(0, self.count):
                 trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.step_angle)
