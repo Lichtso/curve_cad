@@ -16,7 +16,7 @@
 #
 #  ***** GPL LICENSE BLOCK *****
 
-import bpy, math
+import bpy, math, bmesh
 from mathutils import Vector, Matrix
 from . import internal
 
@@ -26,10 +26,10 @@ class OffsetCurve(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     offset: bpy.props.FloatProperty(name='Offset', description='Distace between the original and the first trace', unit='LENGTH', default=0.1)
-    pitch: bpy.props.FloatProperty(name='Pitch', description='Distace between two paralell traces', unit='LENGTH', default=0.1)
+    pitch: bpy.props.FloatProperty(name='Pitch', description='Distace between two parallel traces', unit='LENGTH', default=0.1)
     step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
-    count: bpy.props.IntProperty(name='Count', description='Number of paralell traces', min=1, default=1)
-    connect: bpy.props.BoolProperty(name='Connect', description='Connects all traces if count > 1')
+    count: bpy.props.IntProperty(name='Count', description='Number of parallel traces', min=1, default=1)
+    connect: bpy.props.BoolProperty(name='Connect', description='Connects all traces into one trace')
 
     @classmethod
     def poll(cls, context):
@@ -71,6 +71,57 @@ class OffsetCurve(bpy.types.Operator):
                     internal.addPolygonSpline(bpy.context.object, spline.use_cyclic_u, trace)
             if self.connect and self.count > 1:
                 internal.addPolygonSpline(bpy.context.object, False, vertices)
+        return {'FINISHED'}
+
+class SliceMesh(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_slice_mesh'
+    bl_description = bl_label = 'Slice Mesh'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    pitch_axis: bpy.props.FloatVectorProperty(name='Pitch & Axis', unit='LENGTH', description='Vector between to slices', subtype='DIRECTION', default=(0.0, 0.0, 0.1), size=3)
+    offset: bpy.props.FloatProperty(name='Offset', unit='LENGTH', description='Position of first slice along axis', default=-0.4)
+    slice_count: bpy.props.IntProperty(name='Count', description='Number of slices', min=1, default=9)
+
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object != None and bpy.context.object.type == 'MESH' and bpy.context.object.mode == 'OBJECT'
+
+    def execute(self, context):
+        mesh = bmesh.new()
+        aux_mesh = bpy.context.object.to_mesh(bpy.context.depsgraph, apply_modifiers=True, calc_undeformed=False)
+        mesh.from_mesh(aux_mesh)
+        mesh.transform(bpy.context.object.matrix_world)
+        bpy.data.meshes.remove(aux_mesh)
+
+        internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
+        pitch_axis = Vector(self.pitch_axis)
+        axis = pitch_axis.normalized()
+        for i in range(0, self.slice_count):
+            aux_mesh = mesh.copy()
+            cut_geometry = bmesh.ops.bisect_plane(aux_mesh, geom=aux_mesh.edges[:]+aux_mesh.faces[:], dist=0, plane_co=pitch_axis*i+axis*self.offset, plane_no=axis, clear_outer=False, clear_inner=False)['geom_cut']
+            edge_pool = set([e for e in cut_geometry if isinstance(e, bmesh.types.BMEdge)])
+            while len(edge_pool) > 0:
+                current_edge = edge_pool.pop()
+                first_vertex = current_vertex = current_edge.verts[0]
+                vertices = [current_vertex.co]
+                follow_edge_loop = len(edge_pool) > 0
+                while follow_edge_loop:
+                    current_vertex = current_edge.other_vert(current_vertex)
+                    vertices.append(current_vertex.co)
+                    if current_vertex == first_vertex:
+                        break
+                    follow_edge_loop = False
+                    for edge in current_vertex.link_edges:
+                        if edge in edge_pool:
+                            current_edge = edge
+                            edge_pool.remove(current_edge)
+                            follow_edge_loop = True
+                            break
+                current_vertex = current_edge.other_vert(current_vertex)
+                vertices.append(current_vertex.co)
+                internal.addPolygonSpline(bpy.context.object, False, vertices)
+            aux_mesh.free()
+
         return {'FINISHED'}
 
 class RectMacro(bpy.types.Operator):
@@ -161,4 +212,4 @@ class DrillMacro(bpy.types.Operator):
         internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
-operators = [OffsetCurve, RectMacro, DrillMacro]
+operators = [OffsetCurve, SliceMesh, RectMacro, DrillMacro]
