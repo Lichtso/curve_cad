@@ -114,17 +114,17 @@ def aabbOfPoints(points):
                 min[i] = point[i]
             if max[i] < point[i]:
                 max[i] = point[i]
-    return AABB(center=(max+min)*0.5, dimensions=max-min)
+    return AABB(center=(max+min)*0.5, dimensions=(max-min)*0.5)
 
 def aabbIntersectionTest(a, b, tollerance=0.0):
     for i in range(0, 3):
-        if abs(a.center[i]-b.center[i]) > (a.dimensions[i]+b.dimensions[i]+tollerance):
+        if abs(a.center[i]-b.center[i]) > a.dimensions[i]+b.dimensions[i]+tollerance:
             return False
     return True
 
-def isPointInAABB(point, aabb, tollerance=0.0):
+def isPointInAABB(point, aabb, tollerance=0.0, ignore_axis=None):
     for i in range(0, 3):
-        if point[i] < aabb.center[i]-aabb.dimensions[i]*0.5-tollerance or point[i] > aabb.center[i]+aabb.dimensions[i]*0.5+tollerance:
+        if i != ignore_axis and (point[i] < aabb.center[i]-aabb.dimensions[i]-tollerance or point[i] > aabb.center[i]+aabb.dimensions[i]+tollerance):
             return False
     return True
 
@@ -134,10 +134,12 @@ def lineAABBIntersection(lineBegin, lineEnd, aabb):
         normal = [0, 0, 0]
         normal = Vector(normal[0:i] + [1] + normal[i+1:])
         for j in range(-1, 2, 2):
-            plane = Plane(normal=normal, distance=aabb.center[i]+j*aabb.dimensions[i]*0.5)
+            plane = Plane(normal=normal, distance=aabb.center[i]+j*aabb.dimensions[i])
             param = linePlaneIntersection(lineBegin, lineEnd, plane)
+            if param < 0 or param > 1 or math.isnan(param):
+                continue
             point = lineBegin+param*(lineEnd-lineBegin)
-            if param > 0 and param < 1 and isPointInAABB(point, aabb):
+            if isPointInAABB(point, aabb, 0.0, i):
                 intersections.append((param, point))
     return intersections
 
@@ -715,9 +717,7 @@ def filletSpline(spline, radius):
                 segments[i][1] if i < len(segments) else next.co.xyz
             ])
     spline_points = iterateSpline(spline, handlePoint)
-    new_spline = addBezierSpline(bpy.context.object, spline.use_cyclic_u, vertices)
-    bpy.context.object.data.splines.remove(spline)
-    return new_spline
+    return addBezierSpline(bpy.context.object, spline.use_cyclic_u, vertices)
 
 def bezierBooleanGeometry(splineA, splineB, operation):
     if not splineA.use_cyclic_u or not splineB.use_cyclic_u:

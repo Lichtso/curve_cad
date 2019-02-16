@@ -37,6 +37,7 @@ class Fillet(bpy.types.Operator):
             return {'CANCELLED'}
         for spline in splines:
             internal.filletSpline(spline, self.radius)
+            bpy.context.object.data.splines.remove(spline)
         return {'FINISHED'}
 
 class Boolean(bpy.types.Operator):
