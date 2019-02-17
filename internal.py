@@ -816,3 +816,43 @@ def bezierBooleanGeometry(splineA, splineB, operation):
     bpy.context.object.data.splines.remove(splineB)
     bpy.context.object.data.splines.active = spline
     return True
+
+def truncateToFitBox(transform, spline, aabb):
+    spline_points = spline.points
+    aux = {
+        'traces': [],
+        'vertices': [],
+        'weights': []
+    }
+    def terminateTrace(aux):
+        if len(aux['vertices']) > 0:
+            aux['traces'].append((aux['vertices'], aux['weights']))
+        aux['vertices'] = []
+        aux['weights'] = []
+    for index, point in enumerate(spline_points):
+        begin = transform@point.co.xyz
+        end = spline_points[(index+1)%len(spline_points)]
+        inside = isPointInAABB(begin, aabb)
+        if inside:
+            aux['vertices'].append(begin)
+            aux['weights'].append(point.weight_softbody)
+        if index == len(spline_points)-1 and not spline.use_cyclic_u:
+            break
+        intersections = lineAABBIntersection(begin, transform@end.co.xyz, aabb)
+        if len(intersections) == 2:
+            terminateTrace(aux)
+            aux['traces'].append((
+                [intersections[0][1], intersections[1][1]],
+                [end.weight_softbody, end.weight_softbody]
+            ))
+        elif len(intersections) == 1:
+            aux['vertices'].append(intersections[0][1])
+            aux['weights'].append(end.weight_softbody)
+            if inside:
+                terminateTrace(aux)
+        elif inside and index == len(spline_points)-1 and spline.use_cyclic_u:
+            terminateTrace(aux)
+            aux['traces'][0] = (aux['traces'][-1][0]+aux['traces'][0][0], aux['traces'][-1][1]+aux['traces'][0][1])
+            aux['traces'].pop()
+    terminateTrace(aux)
+    return aux['traces']
