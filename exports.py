@@ -187,7 +187,7 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
             prevSpeed = -1
             for index, current in enumerate(points):
                 speed = self.speed*max(0.0, min(current.weight_softbody, 1.0))
-                if speed != prevSpeed:
+                if speed != prevSpeed and current.weight_softbody != 1.0:
                     f.write('F{:.3f}\n'.format(speed))
                     prevSpeed = speed
                 speed_code = 'G00' if current.weight_softbody == 1.0 else 'G01'
@@ -197,10 +197,10 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
                 if linear:
                     f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
                 else:
-                    points = internal.bezierSegmentPoints(prev, current)
+                    segment_points = internal.bezierSegmentPoints(prev, current)
                     circle = None
                     if self.detect_circles:
-                        circle = internal.circleOfBezier(points)
+                        circle = internal.circleOfBezier(segment_points)
                         if circle:
                             tollerance = 0.001
                             if abs(circle.plane.normal[0]) > 1.0-tollerance:
@@ -215,16 +215,16 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
                             else:
                                 circle = None
                             if circle:
-                                center = transform(circle.center-transform(prev.co))
+                                center = transform(circle.center-prev.co)
                                 f.write('G{} G0{} I{:.3f} J{:.3f} K{:.3f} X{:.3f} Y{:.3f} Z{:.3f}\n'.format(planeIndex, 3 if ccw else 2, center[0], center[1], center[2], position[0], position[1], position[2]))
                     if circle == None:
                         bezier_samples = 128
-                        prev_tangent = internal.bezierTangentAt(points, 0).normalized()
+                        prev_tangent = internal.bezierTangentAt(segment_points, 0).normalized()
                         for t in range(1, bezier_samples+1):
                             t /= bezier_samples
-                            tangent = internal.bezierTangentAt(points, t).normalized()
+                            tangent = internal.bezierTangentAt(segment_points, t).normalized()
                             if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= self.step_angle:
-                                position = transform(internal.bezierPointAt(points, t))
+                                position = transform(internal.bezierPointAt(segment_points, t))
                                 prev_tangent = tangent
                                 f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
         return {'FINISHED'}
