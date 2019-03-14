@@ -3,7 +3,7 @@
 
 
 
-## Specials > Bezier CAD
+## Context Menu > Bezier CAD
 
 ### Fillet
 Select spline points to round them by inserting arcs. Only works on corners between straight lines with handle type "vector".
@@ -33,6 +33,9 @@ Measures the arc length of the selected bezier segments.
 
 ### Offset Curve
 Creates a toolpath with a defined offset to the selected splines.
+
+### Slice Mesh
+Creates a toolpath with a defined offset to the selected mesh.
 
 ### Rect Macro
 Creates a toolpath for a rectangular area.

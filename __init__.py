@@ -70,13 +70,13 @@ def menu_file_import(self, context):
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    bpy.types.VIEW3D_MT_edit_curve_specials.prepend(menu_edit_curve_specials)
+    bpy.types.VIEW3D_MT_edit_curve_context_menu.prepend(menu_edit_curve_specials)
     bpy.types.VIEW3D_MT_curve_add.append(menu_curve_add)
     bpy.types.TOPBAR_MT_file_export.append(menu_file_export)
 
 def unregister():
     for cls in classes:
         bpy.utils.unregister_class(cls)
-    bpy.types.VIEW3D_MT_edit_curve_specials.remove(menu_edit_curve_specials)
+    bpy.types.VIEW3D_MT_edit_curve_context_menu.remove(menu_edit_curve_specials)
     bpy.types.VIEW3D_MT_curve_add.remove(menu_curve_add)
     bpy.types.TOPBAR_MT_file_export.remove(menu_file_export)
