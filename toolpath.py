@@ -93,7 +93,7 @@ class SliceMesh(bpy.types.Operator):
         mesh.transform(bpy.context.object.matrix_world)
         bpy.data.meshes.remove(aux_mesh)
 
-        internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
+        internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
         pitch_axis = Vector(self.pitch_axis)
         axis = pitch_axis.normalized()
         for i in range(0, self.slice_count):
@@ -137,10 +137,10 @@ class RectMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
+            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
             origin = Vector((0.0, 0.0, 0.0))
         else:
-            origin = bpy.context.scene.cursor_location
+            origin = bpy.context.scene.cursor.location
         stride = math.copysign(self.stride, self.pitch)
         length = self.length*0.5
         vertices = []
@@ -174,10 +174,10 @@ class DrillMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor_location
+            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
             origin = Vector((0.0, 0.0, 0.0))
         else:
-            origin = bpy.context.scene.cursor_location
+            origin = bpy.context.scene.cursor.location
         count = int(self.vertex_count*self.screw_count)
         height = -count/self.vertex_count*self.pitch
         vertices = []
