@@ -51,13 +51,17 @@ def nearestPointOfLines(originA, dirA, originB, dirB, tollerance=0.0):
         paramB = (originA-originB)@normalA/divisorB
         return (paramA, paramB, originA+dirA*paramA, originB+dirB*paramB)
 
-def lineIntersection(beginA, endA, beginB, endB):
+def linePointDistance(begin, dir, point):
+    return (point-begin).cross(dir).normalized()@dir
+
+def lineLineIntersection(beginA, endA, beginB, endB, tollerance=0.001):
     dirA = endA-beginA
     dirB = endB-beginB
     intersection = nearestPointOfLines(beginA, dirA, beginB, dirB)
-    if intersection[0] != intersection[0] or intersection[0] < 0 or intersection[0] > 1 or intersection[1] < 0 or intersection[1] > 1:
+    if intersection[0] != intersection[0] or (intersection[2]-intersection[3]).length > tollerance or \
+       intersection[0] < 0 or intersection[0] > 1 or intersection[1] < 0 or intersection[1] > 1:
         return None
-    return (intersection[2]+intersection[3])*0.5
+    return intersection
 
 def linePlaneIntersection(lineBegin, lineEnd, plane):
     det = (lineEnd-lineBegin)@plane.normal
@@ -345,13 +349,25 @@ def bezierIntersectionNarrowPhase(broadPhase, pointsA, pointsB, tollerance=0.000
             bMin = bMid
     return [aMin, bMin, minDist]
 
-def bezierIntersection(segmentA, segmentB, tollerance=0.001):
-    solutions = []
+def segmentIntersection(segmentA, segmentB, tollerance=0.001):
     pointsA = bezierSegmentPoints(segmentA['beginPoint'], segmentA['endPoint'])
     pointsB = bezierSegmentPoints(segmentB['beginPoint'], segmentB['endPoint'])
+    result = []
+    def addCut(paramA, paramB):
+        cutA = {'param': paramA, 'segment': segmentA}
+        cutB = {'param': paramB, 'segment': segmentB}
+        cutA['otherCut'] = cutB
+        cutB['otherCut'] = cutA
+        segmentA['cuts'].append(cutA)
+        segmentB['cuts'].append(cutB)
+        result.append([cutA, cutB])
+    if isSegmentLinear(pointsA) and isSegmentLinear(pointsB):
+        intersection = lineLineIntersection(pointsA[0], pointsA[3], pointsB[0], pointsB[3])
+        if intersection != None:
+            addCut(intersection[0], intersection[1])
+        return result
+    solutions = []
     bezierIntersectionBroadPhase(solutions, pointsA, pointsB)
-    if len(solutions) == 0:
-        return []
     for index in range(0, len(solutions)):
         solutions[index] = bezierIntersectionNarrowPhase(solutions[index], pointsA, pointsB)
     for index in range(0, len(solutions)):
@@ -369,27 +385,20 @@ def bezierIntersection(segmentA, segmentB, tollerance=0.001):
                     solutions[index][2] = float('inf')
     def areIntersectionsAdjacent(segmentA, segmentB, paramA, paramB):
         return segmentA['endIndex'] == segmentB['beginIndex'] and paramA > 1-param_tollerance and paramB < param_tollerance
-    result = []
     for solution in solutions:
         if (solution[2] > tollerance) or \
           (segmentA['spline'] == segmentB['spline'] and \
           (areIntersectionsAdjacent(segmentA, segmentB, solution[0], solution[1]) or \
            areIntersectionsAdjacent(segmentB, segmentA, solution[1], solution[0]))):
             continue
-        cutA = {'param': solution[0], 'segment': segmentA}
-        cutB = {'param': solution[1], 'segment': segmentB}
-        cutA['otherCut'] = cutB
-        cutB['otherCut'] = cutA
-        segmentA['cuts'].append(cutA)
-        segmentB['cuts'].append(cutB)
-        result.append([cutA, cutB])
+        addCut(solution[0], solution[1])
     return result
 
 def bezierMultiIntersection(segments):
     for index in range(0, len(segments)):
         for otherIndex in range(index+1, len(segments)):
-            bezierIntersection(segments[index], segments[otherIndex])
-    cleanupBezierIntersections(segments)
+            segmentIntersection(segments[index], segments[otherIndex])
+    prepareSegmentIntersections(segments)
     subdivideBezierSegments(segments)
 
 def bezierSubivideAt(points, params):
@@ -456,7 +465,7 @@ def subdivideBezierSegment(segment):
         newPoint.co = newPoints[index*3+2]
         newPoint.handle_right = newPoints[index*3+3]
 
-def cleanupBezierIntersections(segments):
+def prepareSegmentIntersections(segments):
     def areCutsAdjacent(cutA, cutB):
         return cutA['segment']['beginIndex'] == cutB['segment']['endIndex'] and \
                cutA['param'] < param_tollerance and cutB['param'] > 1.0-param_tollerance
@@ -659,7 +668,7 @@ def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
             vertices.extend(polygonArcAt(segment_points[0], offset, begin_angle, math.copysign(angle, sign), step_angle, False))
         if angle != 0 or is_first:
             vertices.append(offsetVertex(segment_points[0], current_tangent))
-        if spline.type != 'BEZIER' or (current.handle_right_type == 'VECTOR' and next.handle_left_type == 'VECTOR'):
+        if spline.type == 'POLY' or isSegmentLinear(segment_points):
             vertices.append(offsetVertex(segment_points[3], next_tangent))
         else: # Trace Bezier Segment
             prev_tangent = bezierTangentAt(segment_points, 0).normalized()
@@ -678,10 +687,11 @@ def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
     while i < len(vertices):
         j = i+2
         while j < len(vertices) - (0 if i > 0 else 1):
-            intersection = lineIntersection(vertices[i-1], vertices[i], vertices[j-1], vertices[j])
+            intersection = lineLineIntersection(vertices[i-1], vertices[i], vertices[j-1], vertices[j])
             if intersection == None:
                 j += 1
                 continue
+            intersection = (intersection[2]+intersection[3])*0.5
             areaInner = sign*areaOfPolygon([intersection, vertices[i], vertices[j-1]])
             areaOuter = sign*areaOfPolygon([intersection, vertices[j], vertices[i-1]])
             if areaInner > areaOuter:
@@ -703,7 +713,7 @@ def filletSpline(spline, radius):
         distance = min((prev.co-current.co).length*0.5, (current.co-next.co).length*0.5)
         selected = current.select_control_point if spline.type == 'BEZIER' else current.select
         if not selected or is_first or is_last or angle == 0 or distance == 0 or \
-           (spline.type == 'BEZIER' and (current.handle_left_type != 'VECTOR' or current.handle_right_type != 'VECTOR')):
+           (spline.type == 'BEZIER' and not isSegmentLinear(segment_points)):
             vertices.append([prev_handle, current.co.xyz, next_handle])
             return
         offset = min(radius, distance/math.tan(angle*0.5))
@@ -738,7 +748,7 @@ def bezierBooleanGeometry(splineA, splineB, operation):
     intersections = []
     for segmentA in segmentsA:
         for segmentB in segmentsB:
-            intersections.extend(bezierIntersection(segmentA, segmentB))
+            intersections.extend(segmentIntersection(segmentA, segmentB))
     if len(intersections) == 0:
         if deletionFlagA:
             bpy.context.object.data.splines.remove(splineA)
@@ -746,8 +756,8 @@ def bezierBooleanGeometry(splineA, splineB, operation):
             bpy.context.object.data.splines.remove(splineB)
         return True
 
-    cleanupBezierIntersections(segmentsA)
-    cleanupBezierIntersections(segmentsB)
+    prepareSegmentIntersections(segmentsA)
+    prepareSegmentIntersections(segmentsB)
     subdivideBezierSegmentsOfSameSpline(segmentsA)
     subdivideBezierSegmentsOfSameSpline(segmentsB)
 
