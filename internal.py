@@ -836,7 +836,7 @@ def truncateToFitBox(transform, spline, aabb):
     }
     def terminateTrace(aux):
         if len(aux['vertices']) > 0:
-            aux['traces'].append((aux['vertices'], aux['weights']))
+            aux['traces'].append([aux['vertices'], aux['weights']])
         aux['vertices'] = []
         aux['weights'] = []
     for index, point in enumerate(spline_points):

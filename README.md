@@ -43,6 +43,12 @@ Creates a toolpath for a rectangular area.
 ### Drill Macro
 Creates a toolpath for a circular hole.
 
+### Truncate
+Add an "empty" of type "cube" and transform it to your wishes.
+Select some curve objects and the empty cube last so that it becomes the active object.
+Now, apply the truncate operator to cutoff all the polygon splines inside the curves at the empty cubes boundaries.
+Optionally, movements to the top of the volume (Z-hops) can be added.
+
 
 
 ## File > Export
