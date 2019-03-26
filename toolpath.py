@@ -260,4 +260,44 @@ class Truncate(bpy.types.Operator):
             internal.addPolygonSpline(toolpath, False, trace[0], trace[1])
         return {'FINISHED'}
 
-operators = [OffsetCurve, SliceMesh, RectMacro, DrillMacro, Truncate]
+class Array(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_array'
+    bl_description = bl_label = 'Array'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    offset: bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to layers', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
+    count: bpy.props.IntProperty(name='Count', description='Number of layers', min=2, default=2)
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        offset = Vector(self.offset)
+        splines = internal.bezierSelectedSplines(False, True)
+        for spline in splines:
+            vertex_count = len(spline.points)
+            if spline.use_cyclic_u:
+                vertex_count = vertex_count+1
+            spline.points.add(vertex_count*self.count-len(spline.points))
+            if spline.use_cyclic_u:
+                original = spline.points[0]
+                new = spline.points[vertex_count-1]
+                new.co.xyz = original.co.xyz
+                new.weight_softbody = original.weight_softbody
+            for j in range(1, self.count):
+                for i in range(0, vertex_count):
+                    if spline.use_cyclic_u and i == vertex_count-1:
+                        original = spline.points[0]
+                    else:
+                        original = spline.points[i]
+                    if spline.use_cyclic_u or j%2 == 0:
+                        new = spline.points[j*vertex_count+i]
+                    else:
+                        new = spline.points[j*vertex_count+(vertex_count-1-i)]
+                    new.co.xyz = original.co.xyz+offset*j
+                    new.weight_softbody = original.weight_softbody
+            spline.use_cyclic_u = False
+        return {'FINISHED'}
+
+operators = [OffsetCurve, SliceMesh, RectMacro, DrillMacro, Truncate, Array]

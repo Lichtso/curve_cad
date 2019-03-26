@@ -49,6 +49,8 @@ Select some curve objects and the empty cube last so that it becomes the active 
 Now, apply the truncate operator to cutoff all the polygon splines inside the curves at the empty cubes boundaries.
 Optionally, movements to the top of the volume (Z-hops) can be added.
 
+### Array
+Select some polygon splines in edit mode to duplicate, shift and connect them (like the array modifier).
 
 
 ## File > Export
