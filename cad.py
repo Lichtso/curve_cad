@@ -166,6 +166,28 @@ class Subdivide(bpy.types.Operator):
         internal.subdivideBezierSegments(segments)
         return {'FINISHED'}
 
+class Array(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_array'
+    bl_description = bl_label = 'Array'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    offset: bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to copies', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
+    count: bpy.props.IntProperty(name='Count', description='Number of copies', min=1, default=2)
+    connect: bpy.props.BoolProperty(name='Connect', description='Concatenate individual copies', default=False)
+    serpentine: bpy.props.BoolProperty(name='Serpentine', description='Switch direction of every second copy', default=False)
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        splines = internal.bezierSelectedSplines(True, True)
+        if len(splines) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+        internal.arrayModifier(splines, self.offset, self.count, self.connect, self.serpentine)
+        return {'FINISHED'}
+
 class Circle(bpy.types.Operator):
     bl_idname = 'curve.bezier_cad_circle'
     bl_description = bl_label = 'Circle'
@@ -209,4 +231,4 @@ class Length(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [Fillet, Boolean, Intersection, MergeEnds, Subdivide, Circle, Length]
+operators = [Fillet, Boolean, Intersection, MergeEnds, Subdivide, Array, Circle, Length]

@@ -866,3 +866,56 @@ def truncateToFitBox(transform, spline, aabb):
             aux['traces'].pop()
     terminateTrace(aux)
     return aux['traces']
+
+def arrayModifier(splines, offset, count, connect, serpentine):
+    if connect:
+        for spline in splines:
+            if spline.use_cyclic_u:
+                spline.use_cyclic_u = False
+                points = spline.points if spline.type == 'POLY' else spline.bezier_points
+                points.add(1)
+                begin = points[0]
+                end = points[-1]
+                if spline.type == 'BEZIER':
+                    end.handle_left_type = begin.handle_left_type
+                    end.handle_right_type = begin.handle_right_type
+                    end.handle_left = begin.handle_left
+                    end.handle_right = begin.handle_right
+                else:
+                    end.weight = begin.weight
+                end.co = begin.co
+                end.radius = begin.radius
+                end.tilt = begin.tilt
+                end.weight_softbody = begin.weight_softbody
+                end.hide = begin.hide
+    bpy.ops.curve.select_all(action='DESELECT')
+    for spline in splines:
+        if spline.type == 'BEZIER':
+            for point in spline.bezier_points:
+                point.select_left_handle = point.select_control_point = point.select_right_handle = True
+        elif spline.type == 'POLY':
+            for point in spline.points:
+                point.select = True
+    splines_at_layer = [splines]
+    for i in range(1, count):
+        bpy.ops.curve.duplicate()
+        bpy.ops.transform.translate(value=offset)
+        splines_at_layer.append(bezierSelectedSplines(True, True))
+        if serpentine:
+            bpy.ops.curve.switch_direction()
+    if connect:
+        for i in range(1, count):
+            prev_layer = splines_at_layer[i-1]
+            next_layer = splines_at_layer[i]
+            for j in range(0, len(next_layer)):
+                bpy.ops.curve.select_all(action='DESELECT')
+                if prev_layer[j].type == 'POLY':
+                    prev_layer[j].points[-1].select = True
+                else:
+                    prev_layer[j].bezier_points[-1].select_control_point = True
+                if next_layer[j].type == 'POLY':
+                    next_layer[j].points[0].select = True
+                else:
+                    next_layer[j].bezier_points[0].select_control_point = True
+                bpy.ops.curve.make_segment()
+    bpy.ops.curve.select_all(action='DESELECT')

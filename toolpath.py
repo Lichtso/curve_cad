@@ -92,7 +92,6 @@ class SliceMesh(bpy.types.Operator):
         mesh.from_mesh(aux_mesh)
         mesh.transform(bpy.context.object.matrix_world)
         bpy.data.meshes.remove(aux_mesh)
-
         internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
         pitch_axis = Vector(self.pitch_axis)
         axis = pitch_axis.normalized()
@@ -121,7 +120,54 @@ class SliceMesh(bpy.types.Operator):
                 vertices.append(current_vertex.co)
                 internal.addPolygonSpline(bpy.context.object, False, vertices)
             aux_mesh.free()
+        return {'FINISHED'}
 
+class Truncate(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_truncate'
+    bl_description = bl_label = 'Truncate'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    min_dist: bpy.props.FloatProperty(name='Min Distance', unit='LENGTH', description='Remove vertices which are too close together', min=0.0, default=0.001)
+    z_hop: bpy.props.BoolProperty(name='Z Hop', description='Add movements to the ceiling at trace ends', default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object != None and \
+               bpy.context.object.type == 'EMPTY' and \
+               bpy.context.object.empty_display_type == 'CUBE'
+
+    def execute(self, context):
+        traces = []
+        aabb = internal.AABB(center=Vector((0.0, 0.0, 0.0)), dimensions=Vector((1.0, 1.0, 1.0))*bpy.context.object.empty_display_size)
+        for curve in bpy.context.selected_objects:
+            if curve.type == 'CURVE':
+                transform = bpy.context.object.matrix_world.inverted()@curve.matrix_world
+                inverse_transform = Matrix.Translation(-bpy.context.scene.cursor.location)@bpy.context.object.matrix_world
+                curve_traces = []
+                for spline in curve.data.splines:
+                    if spline.type == 'POLY':
+                        curve_traces += internal.truncateToFitBox(transform, spline, aabb)
+                for trace in curve_traces:
+                    i = len(trace[0])-1
+                    while i > 1:
+                        if (trace[0][i-1]-trace[0][i]).length < self.min_dist:
+                            trace[0].pop(i-1)
+                            trace[1].pop(i-1)
+                        i -= 1
+                    if self.z_hop:
+                        begin = Vector(trace[0][0])
+                        end = Vector(trace[0][-1])
+                        begin.z = end.z = bpy.context.object.empty_display_size
+                        trace[0].insert(0, begin)
+                        trace[1].insert(0, 1.0)
+                        trace[0].append(end)
+                        trace[1].append(1.0)
+                    trace[0] = [inverse_transform@vertex for vertex in trace[0]]
+                    traces.append(trace)
+        toolpath = internal.addCurveObject('Toolpath')
+        toolpath.location = bpy.context.scene.cursor.location
+        for trace in traces:
+            internal.addPolygonSpline(toolpath, False, trace[0], trace[1])
         return {'FINISHED'}
 
 class RectMacro(bpy.types.Operator):
@@ -212,92 +258,4 @@ class DrillMacro(bpy.types.Operator):
         internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
-class Truncate(bpy.types.Operator):
-    bl_idname = 'curve.add_toolpath_truncate'
-    bl_description = bl_label = 'Truncate'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    min_dist: bpy.props.FloatProperty(name='Min Distance', unit='LENGTH', description='Remove vertices which are too close together', min=0.0, default=0.001)
-    z_hop: bpy.props.BoolProperty(name='Z Hop', description='Add movements to the ceiling at trace ends', default=True)
-
-    @classmethod
-    def poll(cls, context):
-        return bpy.context.object != None and \
-               bpy.context.object.type == 'EMPTY' and \
-               bpy.context.object.empty_display_type == 'CUBE'
-
-    def execute(self, context):
-        traces = []
-        aabb = internal.AABB(center=Vector((0.0, 0.0, 0.0)), dimensions=Vector((1.0, 1.0, 1.0))*bpy.context.object.empty_display_size)
-        for curve in bpy.context.selected_objects:
-            if curve.type == 'CURVE':
-                transform = bpy.context.object.matrix_world.inverted()@curve.matrix_world
-                inverse_transform = Matrix.Translation(-bpy.context.scene.cursor.location)@bpy.context.object.matrix_world
-                curve_traces = []
-                for spline in curve.data.splines:
-                    if spline.type == 'POLY':
-                        curve_traces += internal.truncateToFitBox(transform, spline, aabb)
-                for trace in curve_traces:
-                    i = len(trace[0])-1
-                    while i > 1:
-                        if (trace[0][i-1]-trace[0][i]).length < self.min_dist:
-                            trace[0].pop(i-1)
-                            trace[1].pop(i-1)
-                        i -= 1
-                    if self.z_hop:
-                        begin = Vector(trace[0][0])
-                        end = Vector(trace[0][-1])
-                        begin.z = end.z = bpy.context.object.empty_display_size
-                        trace[0].insert(0, begin)
-                        trace[1].insert(0, 1.0)
-                        trace[0].append(end)
-                        trace[1].append(1.0)
-                    trace[0] = [inverse_transform@vertex for vertex in trace[0]]
-                    traces.append(trace)
-        toolpath = internal.addCurveObject('Toolpath')
-        toolpath.location = bpy.context.scene.cursor.location
-        for trace in traces:
-            internal.addPolygonSpline(toolpath, False, trace[0], trace[1])
-        return {'FINISHED'}
-
-class Array(bpy.types.Operator):
-    bl_idname = 'curve.add_toolpath_array'
-    bl_description = bl_label = 'Array'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    offset: bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to layers', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
-    count: bpy.props.IntProperty(name='Count', description='Number of layers', min=2, default=2)
-
-    @classmethod
-    def poll(cls, context):
-        return internal.curveObject()
-
-    def execute(self, context):
-        offset = Vector(self.offset)
-        splines = internal.bezierSelectedSplines(False, True)
-        for spline in splines:
-            vertex_count = len(spline.points)
-            if spline.use_cyclic_u:
-                vertex_count = vertex_count+1
-            spline.points.add(vertex_count*self.count-len(spline.points))
-            if spline.use_cyclic_u:
-                original = spline.points[0]
-                new = spline.points[vertex_count-1]
-                new.co.xyz = original.co.xyz
-                new.weight_softbody = original.weight_softbody
-            for j in range(1, self.count):
-                for i in range(0, vertex_count):
-                    if spline.use_cyclic_u and i == vertex_count-1:
-                        original = spline.points[0]
-                    else:
-                        original = spline.points[i]
-                    if spline.use_cyclic_u or j%2 == 0:
-                        new = spline.points[j*vertex_count+i]
-                    else:
-                        new = spline.points[j*vertex_count+(vertex_count-1-i)]
-                    new.co.xyz = original.co.xyz+offset*j
-                    new.weight_softbody = original.weight_softbody
-            spline.use_cyclic_u = False
-        return {'FINISHED'}
-
-operators = [OffsetCurve, SliceMesh, RectMacro, DrillMacro, Truncate, Array]
+operators = [OffsetCurve, SliceMesh, Truncate, RectMacro, DrillMacro]

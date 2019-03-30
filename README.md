@@ -21,6 +21,10 @@ Merges two end control points into one while preserving the relative positions o
 Blender only allows for uniform subdivision.
 This operator enables you to select multiple segments and split them at custom parameters simultaneously.
 
+### Array
+Blenders array modifier only works on the resulting mesh not on the curves themselves.
+This operator enables you to select splines in edit mode to duplicate, shift and connect them.
+
 ### Circle
 Add a bezier circle which completes the selected segment into a full circle.
 
@@ -37,20 +41,17 @@ Creates a toolpath with a defined offset to the selected splines.
 ### Slice Mesh
 Creates a toolpath with a defined offset to the selected mesh.
 
-### Rect Macro
-Creates a toolpath for a rectangular area.
-
-### Drill Macro
-Creates a toolpath for a circular hole.
-
 ### Truncate
 Add an "empty" of type "cube" and transform it to your wishes.
 Select some curve objects and the empty cube last so that it becomes the active object.
 Now, apply the truncate operator to cutoff all the polygon splines inside the curves at the empty cubes boundaries.
 Optionally, movements to the top of the volume (Z-hops) can be added.
 
-### Array
-Select some polygon splines in edit mode to duplicate, shift and connect them (like the array modifier).
+### Rect Macro
+Creates a toolpath for a rectangular area.
+
+### Drill Macro
+Creates a toolpath for a circular hole.
 
 
 ## File > Export
