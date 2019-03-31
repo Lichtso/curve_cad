@@ -207,10 +207,10 @@ def bezierRoots(dists, tollerance=0.0001):
                 roots.pop(index)
         return roots
     elif abs(b) > tollerance: # Quadratic
-        disc = c*c -4*b*d
+        disc = c*c-4*b*d
         if disc < 0:
             return []
-        disc = sqrt(disc)
+        disc = math.sqrt(disc)
         return [(-c-disc)/(2*b), (-c+disc)/(2*b)]
     elif abs(c) > tollerance: # Linear
         root = -d/c
