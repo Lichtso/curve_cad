@@ -21,7 +21,7 @@ from mathutils import Vector, Matrix
 from bpy_extras.io_utils import ExportHelper
 from . import internal
 
-class svgExport(bpy.types.Operator, ExportHelper):
+class SvgExport(bpy.types.Operator, ExportHelper):
     bl_idname = 'export_svg_format.svg'
     bl_description = bl_label = 'Curves (.svg)'
     filename_ext = '.svg'
@@ -157,7 +157,7 @@ class svgExport(bpy.types.Operator, ExportHelper):
 
         return {'FINISHED'}
 
-class gCodeExport(bpy.types.Operator, ExportHelper):
+class GCodeExport(bpy.types.Operator, ExportHelper):
     bl_idname = 'export_gcode_format.gcode'
     bl_description = bl_label = 'Toolpath (.gcode)'
     filename_ext = '.gcode'
@@ -229,4 +229,4 @@ class gCodeExport(bpy.types.Operator, ExportHelper):
                                 f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))
         return {'FINISHED'}
 
-operators = [svgExport, gCodeExport]
+operators = [SvgExport, GCodeExport]

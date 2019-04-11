@@ -46,7 +46,10 @@ class OffsetCurve(bpy.types.Operator):
             return {'CANCELLED'}
 
         if bpy.context.object.mode != 'EDIT':
-            internal.addCurveObject('Toolpath')
+            internal.addCurveObject('Offset Toolpath')
+            origin = bpy.context.scene.cursor.location
+        else:
+            origin = Vector((0.0, 0.0, 0.0))
 
         for spline in splines:
             spline_points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
@@ -59,6 +62,7 @@ class OffsetCurve(bpy.types.Operator):
                 trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.step_angle)
                 if len(trace) == 0:
                     continue
+                trace = [vertex-origin for vertex in trace]
                 if self.connect and self.count > 1:
                     if spline.use_cyclic_u:
                         trace.append(trace[0])
@@ -84,15 +88,16 @@ class SliceMesh(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bpy.context.object != None and bpy.context.object.type == 'MESH' and bpy.context.object.mode == 'OBJECT'
+        return bpy.context.object != None and bpy.context.object.mode == 'OBJECT'
 
     def execute(self, context):
+        if bpy.context.object.type != 'MESH':
+            self.report({'WARNING'}, 'Active object must be a mesh')
+            return {'CANCELLED'}
         mesh = bmesh.new()
-        aux_mesh = bpy.context.object.to_mesh(bpy.context.depsgraph, apply_modifiers=True, calc_undeformed=False)
-        mesh.from_mesh(aux_mesh)
+        mesh.from_object(bpy.context.object, bpy.context.depsgraph, deform=True, cage=False, face_normals=True)
         mesh.transform(bpy.context.object.matrix_world)
-        bpy.data.meshes.remove(aux_mesh)
-        internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
+        toolpath = internal.addCurveObject('Slices Toolpath')
         pitch_axis = Vector(self.pitch_axis)
         axis = pitch_axis.normalized()
         for i in range(0, self.slice_count):
@@ -118,8 +123,9 @@ class SliceMesh(bpy.types.Operator):
                             break
                 current_vertex = current_edge.other_vert(current_vertex)
                 vertices.append(current_vertex.co)
-                internal.addPolygonSpline(bpy.context.object, False, vertices)
+                internal.addPolygonSpline(toolpath, False, vertices)
             aux_mesh.free()
+        mesh.free()
         return {'FINISHED'}
 
 class Truncate(bpy.types.Operator):
@@ -132,17 +138,20 @@ class Truncate(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bpy.context.object != None and \
-               bpy.context.object.type == 'EMPTY' and \
-               bpy.context.object.empty_display_type == 'CUBE'
+        return bpy.context.object != None and bpy.context.object.mode == 'OBJECT'
 
     def execute(self, context):
-        traces = []
-        aabb = internal.AABB(center=Vector((0.0, 0.0, 0.0)), dimensions=Vector((1.0, 1.0, 1.0))*bpy.context.object.empty_display_size)
-        for curve in bpy.context.selected_objects:
+        if bpy.context.object.type != 'EMPTY' or bpy.context.object.empty_display_type != 'CUBE':
+            self.report({'WARNING'}, 'Active object must be an empty of display type cube')
+            return {'CANCELLED'}
+        selection = bpy.context.selected_objects[:]
+        workspace = bpy.context.object
+        aabb = internal.AABB(center=Vector((0.0, 0.0, 0.0)), dimensions=Vector((1.0, 1.0, 1.0))*workspace.empty_display_size)
+        toolpath = internal.addCurveObject('Truncated Toolpath')
+        for curve in selection:
             if curve.type == 'CURVE':
-                transform = bpy.context.object.matrix_world.inverted()@curve.matrix_world
-                inverse_transform = Matrix.Translation(-bpy.context.scene.cursor.location)@bpy.context.object.matrix_world
+                transform = workspace.matrix_world.inverted()@curve.matrix_world
+                inverse_transform = Matrix.Translation(-toolpath.location)@workspace.matrix_world
                 curve_traces = []
                 for spline in curve.data.splines:
                     if spline.type == 'POLY':
@@ -157,17 +166,12 @@ class Truncate(bpy.types.Operator):
                     if self.z_hop:
                         begin = Vector(trace[0][0])
                         end = Vector(trace[0][-1])
-                        begin.z = end.z = bpy.context.object.empty_display_size
+                        begin.z = end.z = workspace.empty_display_size
                         trace[0].insert(0, begin)
                         trace[1].insert(0, 1.0)
                         trace[0].append(end)
                         trace[1].append(1.0)
-                    trace[0] = [inverse_transform@vertex for vertex in trace[0]]
-                    traces.append(trace)
-        toolpath = internal.addCurveObject('Toolpath')
-        toolpath.location = bpy.context.scene.cursor.location
-        for trace in traces:
-            internal.addPolygonSpline(toolpath, False, trace[0], trace[1])
+                    internal.addPolygonSpline(toolpath, False, [inverse_transform@vertex for vertex in trace[0]], trace[1])
         return {'FINISHED'}
 
 class RectMacro(bpy.types.Operator):
@@ -183,7 +187,7 @@ class RectMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
+            internal.addCurveObject('Rect Toolpath')
             origin = Vector((0.0, 0.0, 0.0))
         else:
             origin = bpy.context.scene.cursor.location
@@ -220,7 +224,7 @@ class DrillMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Toolpath').location = bpy.context.scene.cursor.location
+            internal.addCurveObject('Drill Toolpath')
             origin = Vector((0.0, 0.0, 0.0))
         else:
             origin = bpy.context.scene.cursor.location

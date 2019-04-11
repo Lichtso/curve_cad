@@ -296,6 +296,13 @@ def deleteFromArray(item, array):
             array.pop(index)
             break
 
+def copyAttributes(dst, src):
+    for attribute in dir(src):
+        try:
+            setattr(dst, attribute, getattr(src, attribute))
+        except:
+            pass
+
 def bezierSliceFromTo(points, minParam, maxParam):
     fromP = bezierPointAt(points, minParam)
     fromT = bezierTangentAt(points, minParam)
@@ -564,6 +571,7 @@ def addCurveObject(name):
     curve = bpy.data.curves.new(name=name, type='CURVE')
     curve.dimensions = '3D'
     obj = bpy.data.objects.new(name, curve)
+    obj.location = bpy.context.scene.cursor.location
     bpy.context.scene.collection.objects.link(obj)
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
@@ -836,7 +844,7 @@ def truncateToFitBox(transform, spline, aabb):
     }
     def terminateTrace(aux):
         if len(aux['vertices']) > 0:
-            aux['traces'].append([aux['vertices'], aux['weights']])
+            aux['traces'].append((aux['vertices'], aux['weights']))
         aux['vertices'] = []
         aux['weights'] = []
     for index, point in enumerate(spline_points):
@@ -874,20 +882,7 @@ def arrayModifier(splines, offset, count, connect, serpentine):
                 spline.use_cyclic_u = False
                 points = spline.points if spline.type == 'POLY' else spline.bezier_points
                 points.add(1)
-                begin = points[0]
-                end = points[-1]
-                if spline.type == 'BEZIER':
-                    end.handle_left_type = begin.handle_left_type
-                    end.handle_right_type = begin.handle_right_type
-                    end.handle_left = begin.handle_left
-                    end.handle_right = begin.handle_right
-                else:
-                    end.weight = begin.weight
-                end.co = begin.co
-                end.radius = begin.radius
-                end.tilt = begin.tilt
-                end.weight_softbody = begin.weight_softbody
-                end.hide = begin.hide
+                copyAttributes(points[-1], points[0])
     bpy.ops.curve.select_all(action='DESELECT')
     for spline in splines:
         if spline.type == 'BEZIER':
