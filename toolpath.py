@@ -80,7 +80,7 @@ class OffsetCurve(bpy.types.Operator):
 class SliceMesh(bpy.types.Operator):
     bl_idname = 'curve.add_toolpath_slice_mesh'
     bl_description = bl_label = 'Slice Mesh'
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER', 'UNDO', 'USE_EVAL_DATA'}
 
     pitch_axis: bpy.props.FloatVectorProperty(name='Pitch & Axis', unit='LENGTH', description='Vector between to slices', subtype='DIRECTION', default=(0.0, 0.0, 0.1), size=3)
     offset: bpy.props.FloatProperty(name='Offset', unit='LENGTH', description='Position of first slice along axis', default=-0.4)
