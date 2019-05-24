@@ -662,19 +662,25 @@ def iterateSpline(spline, callback):
         callback(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last)
     return spline_points
 
-def offsetPolygonOfSpline(spline, offset, step_angle, bezier_samples=128):
+def offsetPolygonOfSpline(spline, offset, step_angle, round_line_join, bezier_samples=128, tollerance=0.000001):
     def offsetVertex(position, tangent):
         normal = Vector((-tangent[1], tangent[0], 0))
         return position+normal*offset
     vertices = []
     def handlePoint(segment_points, prev, current, next, prev_tangent, current_tangent, next_tangent, normal, angle, is_first, is_last):
         sign = math.copysign(1, normal[2])
+        angle *= sign
         if is_last:
             return
-        if angle != 0 and not is_first and sign != math.copysign(1, offset): # Convex Round Cap
-            begin_angle = math.atan2(prev_tangent[1], prev_tangent[0])+math.pi*0.5
-            vertices.extend(polygonArcAt(segment_points[0], offset, begin_angle, math.copysign(angle, sign), step_angle, False))
-        if angle != 0 or is_first:
+        is_protruding = (abs(angle) > tollerance and abs(offset) > tollerance)
+        if is_protruding and not is_first and sign != math.copysign(1, offset): # Convex Corner
+            if round_line_join:
+                begin_angle = math.atan2(prev_tangent[1], prev_tangent[0])+math.pi*0.5
+                vertices.extend(polygonArcAt(segment_points[0], offset, begin_angle, angle, step_angle, False))
+            else:
+                distance = offset*math.tan(angle*0.5)
+                vertices.append(offsetVertex(segment_points[0], current_tangent)+current_tangent*distance)
+        if is_protruding or is_first:
             vertices.append(offsetVertex(segment_points[0], current_tangent))
         if spline.type == 'POLY' or isSegmentLinear(segment_points):
             vertices.append(offsetVertex(segment_points[3], next_tangent))
