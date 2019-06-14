@@ -35,7 +35,7 @@ units = [
 param_tollerance = 0.0001
 AABB = namedtuple('AxisAlignedBoundingBox', 'center dimensions')
 Plane = namedtuple('Plane', 'normal distance')
-Circle = namedtuple('Circle', 'plane center radius')
+Circle = namedtuple('Circle', 'orientation center radius')
 
 def nearestPointOfLines(originA, dirA, originB, dirB, tollerance=0.0):
     # https://en.wikipedia.org/wiki/Skew_lines#Nearest_Points
@@ -93,21 +93,22 @@ def circleOfTriangle(a, b, c):
     gamma = (dirAC@dirCB)*(lengthBA*lengthBA*factor)
     center = a*alpha+b*beta+c*gamma
     radius = (lengthBA*lengthCB*lengthAC)/(2*lengthN)
-    plane = Plane(normal=normal/lengthN, distance=center@normal)
-    return Circle(plane=plane, center=center, radius=radius)
+    tangent = (a-center).normalized()
+    orientation = Matrix.Identity(3)
+    orientation.col[2] = normal/lengthN
+    orientation.col[1] = (a-center).normalized()
+    orientation.col[0] = orientation.col[1].xyz.cross(orientation.col[2].xyz)
+    return Circle(orientation=orientation, center=center, radius=radius)
 
-def circleOfBezier(points, tollerance=0.000001):
+def circleOfBezier(points, tollerance=0.000001, samples=16):
     circle = circleOfTriangle(points[0], bezierPointAt(points, 0.5), points[3])
     if circle == None:
         return None
-    samples = 16
     variance = 0
     for t in range(0, samples):
         variance += ((circle.center-bezierPointAt(points, (t+1)/(samples-1))).length/circle.radius-1) ** 2
     variance /= samples
-    if variance > tollerance:
-        return None
-    return circle
+    return None if variance > tollerance else circle
 
 def aabbOfPoints(points):
     min = Vector(points[0])

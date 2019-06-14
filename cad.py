@@ -203,12 +203,14 @@ class Circle(bpy.types.Operator):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        circle = internal.circleOfBezier(internal.bezierSegmentPoints(segments[0]['beginPoint'], segments[0]['endPoint']))
+        segment = internal.bezierSegmentPoints(segments[0]['beginPoint'], segments[0]['endPoint'])
+        circle = internal.circleOfBezier(segment)
         if circle == None:
             self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
-
-        bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
+        bpy.context.scene.cursor.location = circle.center
+        bpy.context.scene.cursor.rotation_mode = 'QUATERNION'
+        bpy.context.scene.cursor.rotation_quaternion = circle.orientation.to_quaternion()
         return {'FINISHED'}
 
 class Length(bpy.types.Operator):

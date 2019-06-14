@@ -165,7 +165,7 @@ class GCodeExport(bpy.types.Operator, ExportHelper):
     speed: bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
     step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     local_coordinates: bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
-    detect_circles: bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles as G02 and G03') # TODO: Detect polygon circles too
+    detect_circles: bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles and helixes as G02 and G03') # TODO: Detect polygon circles too, merge consecutive circle segments
 
     @classmethod
     def poll(cls, context):
@@ -200,23 +200,18 @@ class GCodeExport(bpy.types.Operator, ExportHelper):
                     segment_points = internal.bezierSegmentPoints(prev, current)
                     circle = None
                     if self.detect_circles:
-                        circle = internal.circleOfBezier(segment_points)
-                        if circle:
-                            tollerance = 0.001
-                            if abs(circle.plane.normal[0]) > 1.0-tollerance:
-                                planeIndex = 19
-                                ccw = circle.plane.normal[0] > 0
-                            elif abs(circle.plane.normal[1]) > 1.0-tollerance:
-                                planeIndex = 18
-                                ccw = circle.plane.normal[1] > 0
-                            elif abs(circle.plane.normal[2]) > 1.0-tollerance:
-                                planeIndex = 17
-                                ccw = circle.plane.normal[2] > 0
-                            else:
-                                circle = None
+                        for axis in range(0, 3):
+                            projected_points = []
+                            for point in segment_points:
+                                projected_point = Vector(point)
+                                projected_point[axis] = 0.0
+                                projected_points.append(projected_point)
+                            circle = internal.circleOfBezier(projected_points)
                             if circle:
+                                normal = circle.orientation.col[2]
                                 center = transform(circle.center-prev.co)
-                                f.write('G{} G0{} I{:.3f} J{:.3f} K{:.3f} X{:.3f} Y{:.3f} Z{:.3f}\n'.format(planeIndex, 3 if ccw else 2, center[0], center[1], center[2], position[0], position[1], position[2]))
+                                f.write('G{} G0{} I{:.3f} J{:.3f} K{:.3f} X{:.3f} Y{:.3f} Z{:.3f}\n'.format(19-axis, 3 if normal[axis] > 0.0 else 2, center[0], center[1], center[2], position[0], position[1], position[2]))
+                                break
                     if circle == None:
                         bezier_samples = 128
                         prev_tangent = internal.bezierTangentAt(segment_points, 0).normalized()
