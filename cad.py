@@ -24,7 +24,7 @@ class Fillet(bpy.types.Operator):
     bl_description = bl_label = 'Fillet'
     bl_options = {'REGISTER', 'UNDO'}
 
-    radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', default=0.1)
+    radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', min=0.0, default=0.1)
 
     @classmethod
     def poll(cls, context):

@@ -26,7 +26,7 @@ Blenders array modifier only works on the resulting mesh not on the curves thems
 This operator enables you to select splines in edit mode to duplicate, shift and connect them.
 
 ### Circle
-Add a bezier circle which completes the selected segment into a full circle.
+Sets the 3D cursor to the center of the circle formed by the selected segment.
 
 ### Length
 Measures the arc length of the selected bezier segments.

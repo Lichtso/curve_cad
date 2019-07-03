@@ -30,7 +30,6 @@ class OffsetCurve(bpy.types.Operator):
     step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
     count: bpy.props.IntProperty(name='Count', description='Number of parallel traces', min=1, default=1)
     round_line_join: bpy.props.BoolProperty(name='Round Line Join', description='Insert circle arcs at convex corners', default=True)
-    connect: bpy.props.BoolProperty(name='Connect', description='Connects all traces into one trace')
 
     @classmethod
     def poll(cls, context):
@@ -58,24 +57,10 @@ class OffsetCurve(bpy.types.Operator):
                 if spline_point.co.z != spline_points[0].co.z:
                     self.report({'WARNING'}, 'Curves must be planar and in XY plane')
                     return {'CANCELLED'}
-            vertices = []
             for index in range(0, self.count):
-                trace = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.step_angle, self.round_line_join)
-                if len(trace) == 0:
-                    continue
-                trace = [vertex-origin for vertex in trace]
-                if self.connect and self.count > 1:
-                    if spline.use_cyclic_u:
-                        trace.append(trace[0])
-                        vertices = trace+vertices
-                    else:
-                        if index%2 == 1:
-                            trace = list(reversed(trace))
-                        vertices = trace+vertices
-                else:
-                    internal.addPolygonSpline(bpy.context.object, spline.use_cyclic_u, trace)
-            if self.connect and self.count > 1:
-                internal.addPolygonSpline(bpy.context.object, False, vertices)
+                traces = internal.offsetPolygonOfSpline(spline, self.offset+self.pitch*index, self.step_angle, self.round_line_join)
+                for trace in traces:
+                    internal.addPolygonSpline(bpy.context.object, spline.use_cyclic_u, [vertex-origin for vertex in trace])
         return {'FINISHED'}
 
 class SliceMesh(bpy.types.Operator):
