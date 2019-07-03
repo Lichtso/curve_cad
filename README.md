@@ -2,8 +2,7 @@
 [Overview Video](https://github.com/Lichtso/curve_cad/blob/gallery/trailer.mp4?raw=true)
 
 
-
-## Context Menu > Bezier CAD
+## Specials > Bezier CAD
 
 ### Fillet
 Select spline points to round them by inserting arcs. Only works on corners between straight lines with handle type "vector".
@@ -26,11 +25,10 @@ Blenders array modifier only works on the resulting mesh not on the curves thems
 This operator enables you to select splines in edit mode to duplicate, shift and connect them.
 
 ### Circle
-Sets the 3D cursor to the center of the circle formed by the selected segment.
+Add a bezier circle which completes the selected segment into a full circle.
 
 ### Length
 Measures the arc length of the selected bezier segments.
-
 
 
 ## Add > Toolpath

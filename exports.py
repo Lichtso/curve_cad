@@ -26,14 +26,14 @@ class SvgExport(bpy.types.Operator, ExportHelper):
     bl_description = bl_label = 'Curves (.svg)'
     filename_ext = '.svg'
 
-    selection_only: bpy.props.BoolProperty(name='Selection only', description='instead of exporting all visible curves')
-    absolute_coordinates: bpy.props.BoolProperty(name='Absolute coordinates', description='instead of relative coordinates')
-    viewport_projection: bpy.props.BoolProperty(name='Viewport projection', description='WYSIWYG instead of an local orthographic projection')
-    unit_name: bpy.props.EnumProperty(name='Unit', items=internal.units, default='mm')
+    selection_only = bpy.props.BoolProperty(name='Selection only', description='instead of exporting all visible curves')
+    absolute_coordinates = bpy.props.BoolProperty(name='Absolute coordinates', description='instead of relative coordinates')
+    viewport_projection = bpy.props.BoolProperty(name='Viewport projection', description='WYSIWYG instead of an local orthographic projection')
+    unit_name = bpy.props.EnumProperty(name='Unit', items=internal.units, default='mm')
 
     def serialize_point(self, position, update_ref_position=True):
         if self.transform:
-            position = self.transform@Vector((position[0], position[1], position[2], 1.0))
+            position = self.transform*Vector((position[0], position[1], position[2], 1.0))
             position *= 0.5/position.w
         ref_position = self.origin if self.absolute_coordinates else self.ref_position
         command = '{:.3f},{:.3f}'.format((position[0]-ref_position[0])*self.scale[0], (position[1]-ref_position[1])*self.scale[1])
@@ -73,7 +73,7 @@ class SvgExport(bpy.types.Operator, ExportHelper):
 
     def serialize_object(self, obj):
         if self.area:
-            self.transform = self.area.spaces.active.region_3d.perspective_matrix@obj.matrix_world
+            self.transform = self.area.spaces.active.region_3d.perspective_matrix*obj.matrix_world
             self.origin = Vector((-0.5, 0.5, 0, 0))
         else:
             self.transform = None
@@ -162,10 +162,10 @@ class GCodeExport(bpy.types.Operator, ExportHelper):
     bl_description = bl_label = 'Toolpath (.gcode)'
     filename_ext = '.gcode'
 
-    speed: bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
-    step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
-    local_coordinates: bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
-    detect_circles: bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles and helixes as G02 and G03') # TODO: Detect polygon circles too, merge consecutive circle segments
+    speed = bpy.props.FloatProperty(name='Speed', description='Maximal speed in mm / minute', min=0, default=60)
+    step_angle = bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/128, default=math.pi/16)
+    local_coordinates = bpy.props.BoolProperty(name='Local coords', description='instead of global coordinates')
+    detect_circles = bpy.props.BoolProperty(name='Detect Circles', description='Export bezier circles and helixes as G02 and G03') # TODO: Detect polygon circles too, merge consecutive circle segments
 
     @classmethod
     def poll(cls, context):
@@ -182,7 +182,7 @@ class GCodeExport(bpy.types.Operator, ExportHelper):
                 return gcode
             def transform(position):
                 result = Vector((position[0]*self.scale[0], position[1]*self.scale[1], position[2]*self.scale[2])) # , 1.0
-                return result if self.local_coordinates else bpy.context.object.matrix_world@result
+                return result if self.local_coordinates else bpy.context.object.matrix_world*result
             points = spline.bezier_points if spline.type == 'BEZIER' else spline.points
             prevSpeed = -1
             for index, current in enumerate(points):
@@ -218,7 +218,7 @@ class GCodeExport(bpy.types.Operator, ExportHelper):
                         for t in range(1, bezier_samples+1):
                             t /= bezier_samples
                             tangent = internal.bezierTangentAt(segment_points, t).normalized()
-                            if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= self.step_angle:
+                            if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= self.step_angle:
                                 position = transform(internal.bezierPointAt(segment_points, t))
                                 prev_tangent = tangent
                                 f.write(speed_code+' X{:.3f} Y{:.3f} Z{:.3f}\n'.format(position[0], position[1], position[2]))

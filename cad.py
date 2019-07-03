@@ -24,7 +24,7 @@ class Fillet(bpy.types.Operator):
     bl_description = bl_label = 'Fillet'
     bl_options = {'REGISTER', 'UNDO'}
 
-    radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', min=0.0, default=0.1)
+    radius = bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', min=0.0, default=0.1)
 
     @classmethod
     def poll(cls, context):
@@ -45,7 +45,7 @@ class Boolean(bpy.types.Operator):
     bl_description = bl_label = 'Boolean'
     bl_options = {'REGISTER', 'UNDO'}
 
-    operation: bpy.props.EnumProperty(name='Type', items=[
+    operation = bpy.props.EnumProperty(name='Type', items=[
         ('UNION', 'Union', 'Boolean OR', 0),
         ('INTERSECTION', 'Intersection', 'Boolean AND', 1),
         ('DIFFERENCE', 'Difference', 'Active minus Selected', 2)
@@ -145,7 +145,7 @@ class Subdivide(bpy.types.Operator):
     bl_description = bl_label = 'Subdivide'
     bl_options = {'REGISTER', 'UNDO'}
 
-    params: bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
+    params = bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
 
     @classmethod
     def poll(cls, context):
@@ -171,10 +171,10 @@ class Array(bpy.types.Operator):
     bl_description = bl_label = 'Array'
     bl_options = {'REGISTER', 'UNDO'}
 
-    offset: bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to copies', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
-    count: bpy.props.IntProperty(name='Count', description='Number of copies', min=1, default=2)
-    connect: bpy.props.BoolProperty(name='Connect', description='Concatenate individual copies', default=False)
-    serpentine: bpy.props.BoolProperty(name='Serpentine', description='Switch direction of every second copy', default=False)
+    offset = bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to copies', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
+    count = bpy.props.IntProperty(name='Count', description='Number of copies', min=1, default=2)
+    connect = bpy.props.BoolProperty(name='Connect', description='Concatenate individual copies', default=False)
+    serpentine = bpy.props.BoolProperty(name='Serpentine', description='Switch direction of every second copy', default=False)
 
     @classmethod
     def poll(cls, context):
@@ -208,9 +208,7 @@ class Circle(bpy.types.Operator):
         if circle == None:
             self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
-        bpy.context.scene.cursor.location = circle.center
-        bpy.context.scene.cursor.rotation_mode = 'QUATERNION'
-        bpy.context.scene.cursor.rotation_quaternion = circle.orientation.to_quaternion()
+        bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.orientation.col[2].to_track_quat('Z', 'X').to_euler())
         return {'FINISHED'}
 
 class Length(bpy.types.Operator):

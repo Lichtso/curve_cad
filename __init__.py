@@ -28,7 +28,7 @@ bl_info = {
     'name': 'Curve CAD Tools',
     'author': 'Alexander Meißner',
     'version': (1, 0, 0),
-    'blender': (2, 80, 0),
+    'blender': (2, 79),
     'category': 'Curve',
     'wiki_url': 'http://lichtso.github.io/curve_cad/',
     'tracker_url': 'https://github.com/lichtso/curve_cad/issues'
@@ -41,14 +41,12 @@ class VIEW3D_MT_edit_curve_cad(bpy.types.Menu):
         for operator in cad.operators:
             self.layout.operator(operator.bl_idname)
 
-class VIEW3D_MT_curve_add_toolpath(bpy.types.Menu):
+class INFO_MT_curve_add_toolpath(bpy.types.Menu):
     bl_label = 'Toolpath'
 
     def draw(self, context):
         for operator in toolpath.operators:
             self.layout.operator(operator.bl_idname)
-
-classes = cad.operators+toolpath.operators+exports.operators+[VIEW3D_MT_edit_curve_cad, VIEW3D_MT_curve_add_toolpath]
 
 def menu_edit_curve_specials(self, context):
     self.layout.menu('VIEW3D_MT_edit_curve_cad')
@@ -56,26 +54,20 @@ def menu_edit_curve_specials(self, context):
 
 def menu_curve_add(self, context):
     self.layout.separator()
-    self.layout.menu('VIEW3D_MT_curve_add_toolpath')
+    self.layout.menu('INFO_MT_curve_add_toolpath')
 
 def menu_file_export(self, context):
     for operator in exports.operators:
         self.layout.operator(operator.bl_idname)
 
-def menu_file_import(self, context):
-    for operator in imports.operators:
-        self.layout.operator(operator.bl_idname)
-
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.types.VIEW3D_MT_edit_curve_context_menu.prepend(menu_edit_curve_specials)
-    bpy.types.VIEW3D_MT_curve_add.append(menu_curve_add)
-    bpy.types.TOPBAR_MT_file_export.append(menu_file_export)
+    bpy.utils.register_module(__name__)
+    bpy.types.VIEW3D_MT_edit_curve_specials.prepend(menu_edit_curve_specials)
+    bpy.types.INFO_MT_curve_add.append(menu_curve_add)
+    bpy.types.INFO_MT_file_export.append(menu_file_export)
 
 def unregister():
-    for cls in classes:
-        bpy.utils.unregister_class(cls)
-    bpy.types.VIEW3D_MT_edit_curve_context_menu.remove(menu_edit_curve_specials)
-    bpy.types.VIEW3D_MT_curve_add.remove(menu_curve_add)
-    bpy.types.TOPBAR_MT_file_export.remove(menu_file_export)
+    bpy.utils.unregister_module(__name__)
+    bpy.types.VIEW3D_MT_edit_curve_specials.remove(menu_edit_curve_specials)
+    bpy.types.INFO_MT_curve_add.remove(menu_curve_add)
+    bpy.types.INFO_MT_file_export.remove(menu_file_export)

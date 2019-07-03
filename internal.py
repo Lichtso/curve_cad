@@ -42,17 +42,17 @@ def nearestPointOfLines(originA, dirA, originB, dirB, tollerance=0.0):
     normal = dirA.cross(dirB)
     normalA = dirA.cross(normal)
     normalB = dirB.cross(normal)
-    divisorA = dirA@normalB
-    divisorB = dirB@normalA
+    divisorA = dirA*normalB
+    divisorB = dirB*normalA
     if abs(divisorA) <= tollerance or abs(divisorB) <= tollerance:
         return (float('nan'), float('nan'), originA, originB)
     else:
-        paramA = (originB-originA)@normalB/divisorA
-        paramB = (originA-originB)@normalA/divisorB
+        paramA = (originB-originA)*normalB/divisorA
+        paramB = (originA-originB)*normalA/divisorB
         return (paramA, paramB, originA+dirA*paramA, originB+dirB*paramB)
 
 def linePointDistance(begin, dir, point):
-    return (point-begin).cross(dir).normalized()@dir
+    return (point-begin).cross(dir).normalized()*dir
 
 def lineLineIntersection(beginA, endA, beginB, endB, tollerance=0.001):
     dirA = endA-beginA
@@ -64,9 +64,9 @@ def lineLineIntersection(beginA, endA, beginB, endB, tollerance=0.001):
     return intersection
 
 def linePlaneIntersection(lineBegin, lineEnd, plane):
-    det = (lineEnd-lineBegin)@plane.normal
-    return float('nan') if det == 0 else (plane.distance-lineBegin@plane.normal)/det
-    # return float('nan') if det == 0 else (plane.normal*plane.distance-lineBegin)@plane.normal/det
+    det = (lineEnd-lineBegin)*plane.normal
+    return float('nan') if det == 0 else (plane.distance-lineBegin*plane.normal)/det
+    # return float('nan') if det == 0 else (plane.normal*plane.distance-lineBegin)*plane.normal/det
 
 def areaOfPolygon(vertices):
     area = 0
@@ -88,9 +88,9 @@ def circleOfTriangle(a, b, c):
     if lengthN == 0:
         return None
     factor = -1/(2*lengthN*lengthN)
-    alpha = (dirBA@dirAC)*(lengthCB*lengthCB*factor)
-    beta = (dirBA@dirCB)*(lengthAC*lengthAC*factor)
-    gamma = (dirAC@dirCB)*(lengthBA*lengthBA*factor)
+    alpha = (dirBA*dirAC)*(lengthCB*lengthCB*factor)
+    beta = (dirBA*dirCB)*(lengthAC*lengthAC*factor)
+    gamma = (dirAC*dirCB)*(lengthBA*lengthBA*factor)
     center = a*alpha+b*beta+c*gamma
     radius = (lengthBA*lengthCB*lengthAC)/(2*lengthN)
     tangent = (a-center).normalized()
@@ -160,7 +160,7 @@ def bezierTangentAt(points, t):
 def bezierLength(points, beginT=0, endT=1, samples=1024):
     # https://en.wikipedia.org/wiki/Arc_length#Finding_arc_lengths_by_integrating
     vec = [points[1]-points[0], points[2]-points[1], points[3]-points[2]]
-    dot = [vec[0]@vec[0], vec[0]@vec[1], vec[0]@vec[2], vec[1]@vec[1], vec[1]@vec[2], vec[2]@vec[2]]
+    dot = [vec[0]*vec[0], vec[0]*vec[1], vec[0]*vec[2], vec[1]*vec[1], vec[1]*vec[2], vec[2]*vec[2]]
     factors = [
         dot[0],
         4*(dot[1]-dot[0]),
@@ -286,7 +286,7 @@ def isPointInSpline(point, spline):
     return spline.use_cyclic_u and len(xRaySplineIntersectionTest(spline, point))%2 == 1
 
 def isSegmentLinear(points, tollerance=0.0001):
-    return 1.0-(points[1]-points[0]).normalized()@(points[3]-points[2]).normalized() < tollerance
+    return 1.0-(points[1]-points[0]).normalized()*(points[3]-points[2]).normalized() < tollerance
 
 def bezierSegmentPoints(begin, end):
     return [begin.co, begin.handle_right, end.handle_left, end.co]
@@ -572,10 +572,10 @@ def addCurveObject(name):
     curve = bpy.data.curves.new(name=name, type='CURVE')
     curve.dimensions = '3D'
     obj = bpy.data.objects.new(name, curve)
-    obj.location = bpy.context.scene.cursor.location
-    bpy.context.scene.collection.objects.link(obj)
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+    obj.location = bpy.context.space_data.cursor_location
+    obj.select = True
+    bpy.context.scene.objects.link(obj)
+    bpy.context.scene.objects.active = obj
     return obj
 
 def addPolygonSpline(obj, cyclic, vertices, weights=None, select=False):
@@ -637,7 +637,7 @@ def bezierArcAt(tangent, normal, center, radius, angle, tollerance=0.99999):
     ]
     for i in range(0, segment_count):
         rotation = Matrix.Rotation((i+0.5)*angle, 4, 'Z')
-        segments.append(list(map(lambda v: transform@(rotation@v), points)))
+        segments.append(list(map(lambda v: transform*(rotation*v), points)))
     return segments
 
 def iterateSpline(spline, callback):
@@ -660,7 +660,7 @@ def iterateSpline(spline, callback):
             prev_tangent = (prev_segment_points[3]-prev_segment_points[0]).normalized()
             current_tangent = next_tangent = (next_segment_points[3]-next_segment_points[0]).normalized()
         normal = prev_tangent.cross(current_tangent).normalized()
-        angle = prev_tangent@current_tangent
+        angle = prev_tangent*current_tangent
         angle = 0 if abs(angle-1.0) < 0.0001 else math.acos(angle)
         is_first = (index == 0) and not spline.use_cyclic_u
         is_last = (index == len(spline_points)-1) and not spline.use_cyclic_u
@@ -694,7 +694,7 @@ def offsetPolygonOfSpline(spline, offset, step_angle, round_line_join, bezier_sa
             for t in range(1, bezier_samples+1):
                 t /= bezier_samples
                 tangent = bezierTangentAt(next_segment_points, t).normalized()
-                if t == 1 or math.acos(min(max(-1, prev_tangent@tangent), 1)) >= step_angle:
+                if t == 1 or math.acos(min(max(-1, prev_tangent*tangent), 1)) >= step_angle:
                     vertices.append(offsetVertex(bezierPointAt(next_segment_points, t), tangent))
                     prev_tangent = tangent
     spline_points = iterateSpline(spline, handlePoint)
@@ -857,7 +857,7 @@ def truncateToFitBox(transform, spline, aabb):
         aux['vertices'] = []
         aux['weights'] = []
     for index, point in enumerate(spline_points):
-        begin = transform@point.co.xyz
+        begin = transform*point.co.xyz
         end = spline_points[(index+1)%len(spline_points)]
         inside = isPointInAABB(begin, aabb)
         if inside:
@@ -865,7 +865,7 @@ def truncateToFitBox(transform, spline, aabb):
             aux['weights'].append(point.weight_softbody)
         if index == len(spline_points)-1 and not spline.use_cyclic_u:
             break
-        intersections = lineAABBIntersection(begin, transform@end.co.xyz, aabb)
+        intersections = lineAABBIntersection(begin, transform*end.co.xyz, aabb)
         if len(intersections) == 2:
             terminateTrace(aux)
             aux['traces'].append((
