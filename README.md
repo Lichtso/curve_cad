@@ -3,7 +3,10 @@
 
 
 
-## Specials > Bezier CAD
+## Context Menu > Bezier CAD
+
+### Fillet
+Select spline points to round them by inserting arcs. Only works on corners between straight lines with handle type "vector".
 
 ### Boolean
 Select exactly two bezier splines to combine their area into a new one by union, intersection or difference.
@@ -18,8 +21,12 @@ Merges two end control points into one while preserving the relative positions o
 Blender only allows for uniform subdivision.
 This operator enables you to select multiple segments and split them at custom parameters simultaneously.
 
+### Array
+Blenders array modifier only works on the resulting mesh not on the curves themselves.
+This operator enables you to select splines in edit mode to duplicate, shift and connect them.
+
 ### Circle
-Add a bezier circle which completes the selected segment into a full circle.
+Sets the 3D cursor to the center of the circle formed by the selected segment.
 
 ### Length
 Measures the arc length of the selected bezier segments.
@@ -31,12 +38,20 @@ Measures the arc length of the selected bezier segments.
 ### Offset Curve
 Creates a toolpath with a defined offset to the selected splines.
 
+### Slice Mesh
+Creates a toolpath with a defined offset to the selected mesh.
+
+### Truncate
+Add an "empty" of type "cube" and transform it to your wishes.
+Select some curve objects and the empty cube last so that it becomes the active object.
+Now, apply the truncate operator to cutoff all the polygon splines inside the curves at the empty cubes boundaries.
+Optionally, movements to the top of the volume (Z-hops) can be added.
+
 ### Rect Macro
 Creates a toolpath for a rectangular area.
 
 ### Drill Macro
 Creates a toolpath for a circular hole.
-
 
 
 ## File > Export

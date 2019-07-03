@@ -19,11 +19,33 @@
 import bpy
 from . import internal
 
+class Fillet(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_fillet'
+    bl_description = bl_label = 'Fillet'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', min=0.0, default=0.1)
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        splines = internal.bezierSelectedSplines(True, True, True)
+        if len(splines) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+        for spline in splines:
+            internal.filletSpline(spline, self.radius)
+            bpy.context.object.data.splines.remove(spline)
+        return {'FINISHED'}
+
 class Boolean(bpy.types.Operator):
     bl_idname = 'curve.bezier_cad_boolean'
     bl_description = bl_label = 'Boolean'
     bl_options = {'REGISTER', 'UNDO'}
-    operation = bpy.props.EnumProperty(name='Type', items=[
+
+    operation: bpy.props.EnumProperty(name='Type', items=[
         ('UNION', 'Union', 'Boolean OR', 0),
         ('INTERSECTION', 'Intersection', 'Boolean AND', 1),
         ('DIFFERENCE', 'Difference', 'Active minus Selected', 2)
@@ -34,10 +56,14 @@ class Boolean(bpy.types.Operator):
         return internal.curveObject()
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(True, False)
+        if bpy.context.object.data.dimensions != '2D':
+            self.report({'WARNING'}, 'Can only be applied in 2D')
+            return {'CANCELLED'}
+        splines = internal.bezierSelectedSplines(True, True)
         if len(splines) != 2:
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
+        bpy.ops.curve.spline_type_set(type='BEZIER')
         splineA = bpy.context.object.data.splines.active
         splineB = splines[0] if (splines[1] == splineA) else splines[1]
         if not internal.bezierBooleanGeometry(splineA, splineB, self.operation):
@@ -119,11 +145,11 @@ class Subdivide(bpy.types.Operator):
     bl_description = bl_label = 'Subdivide'
     bl_options = {'REGISTER', 'UNDO'}
 
+    params: bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
+
     @classmethod
     def poll(cls, context):
         return internal.curveObject()
-
-    params = bpy.props.StringProperty(name='Params', default='0.25 0.5 0.75')
 
     def execute(self, context):
         segments = internal.bezierSegments(bpy.context.object.data.splines, True)
@@ -138,6 +164,28 @@ class Subdivide(bpy.types.Operator):
         for segment in segments:
             segment['cuts'].extend(cuts)
         internal.subdivideBezierSegments(segments)
+        return {'FINISHED'}
+
+class Array(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_array'
+    bl_description = bl_label = 'Array'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    offset: bpy.props.FloatVectorProperty(name='Offset', unit='LENGTH', description='Vector between to copies', subtype='DIRECTION', default=(0.0, 0.0, -1.0), size=3)
+    count: bpy.props.IntProperty(name='Count', description='Number of copies', min=1, default=2)
+    connect: bpy.props.BoolProperty(name='Connect', description='Concatenate individual copies', default=False)
+    serpentine: bpy.props.BoolProperty(name='Serpentine', description='Switch direction of every second copy', default=False)
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        splines = internal.bezierSelectedSplines(True, True)
+        if len(splines) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+        internal.arrayModifier(splines, self.offset, self.count, self.connect, self.serpentine)
         return {'FINISHED'}
 
 class Circle(bpy.types.Operator):
@@ -155,12 +203,14 @@ class Circle(bpy.types.Operator):
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
 
-        circle = internal.circleOfBezier(internal.bezierSegmentPoints(segments[0]['beginPoint'], segments[0]['endPoint']))
+        segment = internal.bezierSegmentPoints(segments[0]['beginPoint'], segments[0]['endPoint'])
+        circle = internal.circleOfBezier(segment)
         if circle == None:
             self.report({'WARNING'}, 'Not a circle')
             return {'CANCELLED'}
-
-        bpy.ops.curve.primitive_bezier_circle_add(radius=circle.radius, location=circle.center, rotation=circle.plane.normal.to_track_quat('Z', 'X').to_euler())
+        bpy.context.scene.cursor.location = circle.center
+        bpy.context.scene.cursor.rotation_mode = 'QUATERNION'
+        bpy.context.scene.cursor.rotation_quaternion = circle.orientation.to_quaternion()
         return {'FINISHED'}
 
 class Length(bpy.types.Operator):
@@ -183,4 +233,4 @@ class Length(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [Boolean, Intersection, MergeEnds, Subdivide, Circle, Length]
+operators = [Fillet, Boolean, Intersection, MergeEnds, Subdivide, Array, Circle, Length]
