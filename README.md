@@ -1,6 +1,4 @@
 # Features
-[Overview Video](https://github.com/Lichtso/curve_cad/blob/gallery/trailer.mp4?raw=true)
-
 
 
 ## Context Menu > Bezier CAD
@@ -30,7 +28,6 @@ Sets the 3D cursor to the center of the circle formed by the selected segment.
 
 ### Length
 Measures the arc length of the selected bezier segments.
-
 
 
 ## Add > Toolpath

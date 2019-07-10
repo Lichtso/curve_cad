@@ -25,18 +25,19 @@ class Fillet(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     radius: bpy.props.FloatProperty(name='Radius', description='Radius of the rounded corners', unit='LENGTH', min=0.0, default=0.1)
+    chamfer_mode: bpy.props.BoolProperty(name='Chamfer', description='Cut off sharp without rounding', default=False)
 
     @classmethod
     def poll(cls, context):
         return internal.curveObject()
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(True, True, True)
+        splines = internal.getSelectedSplines(True, True, True)
         if len(splines) == 0:
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}
         for spline in splines:
-            internal.filletSpline(spline, self.radius)
+            internal.filletSpline(spline, self.radius, self.chamfer_mode)
             bpy.context.object.data.splines.remove(spline)
         return {'FINISHED'}
 
@@ -59,7 +60,7 @@ class Boolean(bpy.types.Operator):
         if bpy.context.object.data.dimensions != '2D':
             self.report({'WARNING'}, 'Can only be applied in 2D')
             return {'CANCELLED'}
-        splines = internal.bezierSelectedSplines(True, True)
+        splines = internal.getSelectedSplines(True, True)
         if len(splines) != 2:
             self.report({'WARNING'}, 'Invalid selection')
             return {'CANCELLED'}
@@ -181,7 +182,7 @@ class Array(bpy.types.Operator):
         return internal.curveObject()
 
     def execute(self, context):
-        splines = internal.bezierSelectedSplines(True, True)
+        splines = internal.getSelectedSplines(True, True)
         if len(splines) == 0:
             self.report({'WARNING'}, 'Nothing selected')
             return {'CANCELLED'}

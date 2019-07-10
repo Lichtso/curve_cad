@@ -37,7 +37,7 @@ class OffsetCurve(bpy.types.Operator):
 
     def execute(self, context):
         if bpy.context.object.mode == 'EDIT':
-            splines = internal.bezierSelectedSplines(True, True)
+            splines = internal.getSelectedSplines(True, True)
         else:
             splines = bpy.context.object.data.splines
 
@@ -46,7 +46,7 @@ class OffsetCurve(bpy.types.Operator):
             return {'CANCELLED'}
 
         if bpy.context.object.mode != 'EDIT':
-            internal.addCurveObject('Offset Toolpath')
+            internal.addObject('CURVE', 'Offset Toolpath')
             origin = bpy.context.scene.cursor.location
         else:
             origin = Vector((0.0, 0.0, 0.0))
@@ -84,7 +84,7 @@ class SliceMesh(bpy.types.Operator):
         mesh = bmesh.new()
         mesh.from_object(bpy.context.object, depsgraph, deform=True, cage=False, face_normals=True)
         mesh.transform(bpy.context.object.matrix_world)
-        toolpath = internal.addCurveObject('Slices Toolpath')
+        toolpath = internal.addObject('CURVE', 'Slices Toolpath')
         pitch_axis = Vector(self.pitch_axis)
         axis = pitch_axis.normalized()
         for i in range(0, self.slice_count):
@@ -134,7 +134,7 @@ class Truncate(bpy.types.Operator):
         selection = bpy.context.selected_objects[:]
         workspace = bpy.context.object
         aabb = internal.AABB(center=Vector((0.0, 0.0, 0.0)), dimensions=Vector((1.0, 1.0, 1.0))*workspace.empty_display_size)
-        toolpath = internal.addCurveObject('Truncated Toolpath')
+        toolpath = internal.addObject('CURVE', 'Truncated Toolpath')
         for curve in selection:
             if curve.type == 'CURVE':
                 transform = workspace.matrix_world.inverted()@curve.matrix_world
@@ -174,7 +174,7 @@ class RectMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Rect Toolpath')
+            internal.addObject('CURVE', 'Rect Toolpath')
             origin = Vector((0.0, 0.0, 0.0))
         else:
             origin = bpy.context.scene.cursor.location
@@ -211,7 +211,7 @@ class DrillMacro(bpy.types.Operator):
 
     def execute(self, context):
         if not internal.curveObject():
-            internal.addCurveObject('Drill Toolpath')
+            internal.addObject('CURVE', 'Drill Toolpath')
             origin = Vector((0.0, 0.0, 0.0))
         else:
             origin = bpy.context.scene.cursor.location
