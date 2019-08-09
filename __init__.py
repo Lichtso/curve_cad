@@ -30,7 +30,7 @@ bl_info = {
     'version': (1, 0, 0),
     'blender': (2, 79),
     'category': 'Curve',
-    'wiki_url': 'http://lichtso.github.io/curve_cad/',
+    'wiki_url': 'https://github.com/Lichtso/curve_cad',
     'tracker_url': 'https://github.com/lichtso/curve_cad/issues'
 }
 
