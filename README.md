@@ -4,10 +4,11 @@
 ## Context Menu > Bezier CAD
 
 ### Fillet
-Select spline points to round them by inserting arcs. Only works on corners between straight lines with handle type "vector".
+Select spline points to round them by inserting arcs or chamfers. Only works on corners between straight lines with handle type "vector".
 
 ### Boolean
 Select exactly two bezier splines to combine their area into a new one by union, intersection or difference.
+For the difference mode the order of selection matters. The active spline can be defined by deselecting and selecting one vertex again.
 
 ### Intersection
 Select at least two segments to split them at their intersections.
@@ -37,6 +38,10 @@ Creates a toolpath with a defined offset to the selected splines.
 
 ### Slice Mesh
 Creates a toolpath with a defined offset to the selected mesh.
+
+### Discretize Curve
+Converts a bezier spline to a polygon spline.
+It is adaptive by inserting more vertices where more curvature occurs.
 
 ### Truncate
 Add an "empty" of type "cube" and transform it to your wishes.

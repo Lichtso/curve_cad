@@ -115,6 +115,41 @@ class SliceMesh(bpy.types.Operator):
         mesh.free()
         return {'FINISHED'}
 
+class DiscretizeCurve(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_discretize_curve'
+    bl_description = bl_label = 'Discretize Curve'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    step_angle: bpy.props.FloatProperty(name='Resolution', description='Smaller values make curves smoother by adding more vertices', unit='ROTATION', min=math.pi/512, default=math.pi/16)
+    samples: bpy.props.IntProperty(name='Sample Count', description='Number of samples to test per curve segment', min=1, default=128)
+
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object != None and bpy.context.object.type == 'CURVE'
+
+    def execute(self, context):
+        if bpy.context.object.mode == 'EDIT':
+            splines = internal.getSelectedSplines(True, False)
+        else:
+            splines = bpy.context.object.data.splines
+
+        if len(splines) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+
+        if bpy.context.object.mode != 'EDIT':
+            internal.addObject('CURVE', 'Discretized Curve')
+            origin = bpy.context.scene.cursor.location
+        else:
+            origin = Vector((0.0, 0.0, 0.0))
+
+        for spline in splines:
+            if spline.type != 'BEZIER':
+                continue
+            result = internal.discretizeCurve(spline, self.step_angle, self.samples)
+            internal.addPolygonSpline(bpy.context.object, spline.use_cyclic_u, [vertex-origin for vertex in result])
+        return {'FINISHED'}
+
 class Truncate(bpy.types.Operator):
     bl_idname = 'curve.add_toolpath_truncate'
     bl_description = bl_label = 'Truncate'
@@ -249,4 +284,4 @@ class DrillMacro(bpy.types.Operator):
         internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
-operators = [OffsetCurve, SliceMesh, Truncate, RectMacro, DrillMacro]
+operators = [OffsetCurve, SliceMesh, DiscretizeCurve, Truncate, RectMacro, DrillMacro]
