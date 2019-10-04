@@ -91,6 +91,24 @@ class Intersection(bpy.types.Operator):
         internal.bezierMultiIntersection(segments)
         return {'FINISHED'}
 
+class HandleProjection(bpy.types.Operator):
+    bl_idname = 'curve.bezier_cad_handle_projection'
+    bl_description = bl_label = 'Handle Projection'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return internal.curveObject()
+
+    def execute(self, context):
+        segments = internal.bezierSegments(bpy.context.object.data.splines, True)
+        if len(segments) < 1:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+
+        internal.bezierProjectHandles(segments)
+        return {'FINISHED'}
+
 class MergeEnds(bpy.types.Operator):
     bl_idname = 'curve.bezier_cad_merge_ends'
     bl_description = bl_label = 'Merge Ends'
@@ -235,4 +253,4 @@ class Length(bpy.types.Operator):
         self.report({'INFO'}, bpy.utils.units.to_string(bpy.context.scene.unit_settings.system, 'LENGTH', length))
         return {'FINISHED'}
 
-operators = [Fillet, Boolean, Intersection, MergeEnds, Subdivide, Array, Circle, Length]
+operators = [Fillet, Boolean, Intersection, HandleProjection, MergeEnds, Subdivide, Array, Circle, Length]

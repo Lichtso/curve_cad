@@ -13,6 +13,10 @@ For the difference mode the order of selection matters. The active spline can be
 ### Intersection
 Select at least two segments to split them at their intersections.
 
+### Handle Projection
+Adds the point, where the two rays a segments handles form come closest to each other, to the selected segment.
+This can be used to undo a fillet and thus sharpen a rounded corner.
+
 ### Merge Ends
 Merges two end control points into one while preserving the relative positions of their handles.
 
