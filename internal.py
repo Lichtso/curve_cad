@@ -290,6 +290,16 @@ def isSegmentLinear(points, tollerance=0.0001):
 def bezierSegmentPoints(begin, end):
     return [begin.co, begin.handle_right, end.handle_left, end.co]
 
+def grab_cursor(context, event):
+    if event.mouse_region_x < 0:
+        context.window.cursor_warp(context.region.x+context.region.width, event.mouse_y)
+    elif event.mouse_region_x > context.region.width:
+        context.window.cursor_warp(context.region.x, event.mouse_y)
+    elif event.mouse_region_y < 0:
+        context.window.cursor_warp(event.mouse_x, context.region.y+context.region.height)
+    elif event.mouse_region_y > context.region.height:
+        context.window.cursor_warp(event.mouse_x, context.region.y)
+
 def deleteFromArray(item, array):
     for index, current in enumerate(array):
         if current is item:
@@ -586,7 +596,6 @@ def getSelectedSplines(include_bezier, include_polygon, allow_partial_selection=
     return result
 
 def addObject(type, name):
-    bpy.ops.object.select_all(action='DESELECT')
     if type == 'CURVE':
         data = bpy.data.curves.new(name=name, type='CURVE')
         data.dimensions = '3D'

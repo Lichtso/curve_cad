@@ -41,7 +41,8 @@ Measures the arc length of the selected bezier segments.
 Creates a toolpath with a defined offset to the selected splines.
 
 ### Slice Mesh
-Creates a toolpath with a defined offset to the selected mesh.
+Works like the loop cut tool but it is based on the geometry not the topology.
+Use the 3D cursor to define the pivot and orientation of the slice planes.
 
 ### Discretize Curve
 Converts a bezier spline to a polygon spline.
