@@ -44,6 +44,10 @@ Creates a toolpath with a defined offset to the selected splines.
 Works like the loop cut tool but it is based on the geometry not the topology.
 Use the 3D cursor to define the pivot and orientation of the slice planes.
 
+### Dog Bone
+Adds overshoot for milling corners so that a sharp polygon fits inside an otherwise rounded corner.
+What counts as inside and outside can be flipped by switching the direction of a spline.
+
 ### Discretize Curve
 Converts a bezier spline to a polygon spline.
 It is adaptive by inserting more vertices where more curvature occurs.

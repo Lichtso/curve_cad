@@ -171,6 +171,40 @@ class SliceMesh(bpy.types.Operator):
         self.perform(context)
         return {'FINISHED'}
 
+class DogBone(bpy.types.Operator):
+    bl_idname = 'curve.add_toolpath_dogbone'
+    bl_description = bl_label = 'Dog Bone'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    radius: bpy.props.FloatProperty(name='Radius', description='Tool radius to compensate for', unit='LENGTH', min=0.0, default=0.1)
+
+    @classmethod
+    def poll(cls, context):
+        return bpy.context.object != None and bpy.context.object.type == 'CURVE'
+
+    def execute(self, context):
+        if bpy.context.object.mode == 'EDIT':
+            splines = internal.getSelectedSplines(True, False)
+        else:
+            splines = bpy.context.object.data.splines
+
+        if len(splines) == 0:
+            self.report({'WARNING'}, 'Nothing selected')
+            return {'CANCELLED'}
+
+        if bpy.context.object.mode != 'EDIT':
+            internal.addObject('CURVE', 'Dog Bone')
+            origin = bpy.context.scene.cursor.location
+        else:
+            origin = Vector((0.0, 0.0, 0.0))
+
+        for spline in splines:
+            if spline.type != 'BEZIER':
+                continue
+            result = internal.dogBone(spline, self.radius)
+            internal.addBezierSpline(bpy.context.object, spline.use_cyclic_u, result) # [vertex-origin for vertex in result])
+        return {'FINISHED'}
+
 class DiscretizeCurve(bpy.types.Operator):
     bl_idname = 'curve.add_toolpath_discretize_curve'
     bl_description = bl_label = 'Discretize Curve'
@@ -340,4 +374,4 @@ class DrillMacro(bpy.types.Operator):
         internal.addPolygonSpline(bpy.context.object, False, vertices, weights)
         return {'FINISHED'}
 
-operators = [OffsetCurve, SliceMesh, DiscretizeCurve, Truncate, RectMacro, DrillMacro]
+operators = [OffsetCurve, SliceMesh, DogBone, DiscretizeCurve, Truncate, RectMacro, DrillMacro]
