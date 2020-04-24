@@ -114,7 +114,7 @@ class MergeEnds(bpy.types.Operator):
     bl_description = bl_label = 'Merge Ends'
     bl_options = {'REGISTER', 'UNDO'}
 
-    max_dist: bpy.props.FloatProperty(name='Distance', description='Threshold of the maximum distance at which two controll points are merged', unit='LENGTH', min=0.0, default=0.1)
+    max_dist: bpy.props.FloatProperty(name='Distance', description='Threshold of the maximum distance at which two control points are merged', unit='LENGTH', min=0.0, default=0.1)
 
     @classmethod
     def poll(cls, context):

@@ -638,15 +638,11 @@ def addBezierSpline(obj, cyclic, vertices, weights=None, select=False):
     return spline
 
 def mergeEnds(splines, points, is_last_point):
-    if not is_last_point[1]:
-        splines[1], splines[0] = splines[0], splines[1]
-        points[1], points[0] = points[0], points[1]
-        is_last_point[1], is_last_point[0] = is_last_point[0], is_last_point[1]
-
-    points[0].handle_left_type = 'FREE'
-    points[0].handle_right_type = 'FREE'
+    bpy.ops.curve.select_all(action='DESELECT')
+    points[0].handle_left_type = points[0].handle_right_type = 'FREE'
     new_co = (points[0].co+points[1].co)*0.5
     handle = (points[1].handle_left if is_last_point[1] else points[1].handle_right)+new_co-points[1].co
+    points[0].select_left_handle = points[0].select_right_handle = True
     if is_last_point[0]:
         points[0].handle_left += new_co-points[0].co
         points[0].handle_right = handle
@@ -654,18 +650,12 @@ def mergeEnds(splines, points, is_last_point):
         points[0].handle_right += new_co-points[0].co
         points[0].handle_left = handle
     points[0].co = new_co
-
-    point_index = [len(splines[0].bezier_points), len(splines[1].bezier_points)]
-    bpy.ops.curve.select_all(action='DESELECT')
-    points[0].select_control_point = True
-    points[1].select_control_point = True
+    points[0].select_control_point = points[1].select_control_point = True
     bpy.ops.curve.make_segment()
-    # print(is_last_point, point_index, splines[0].bezier_points, splines[1].bezier_points)
-    spline = splines[0] if len(splines[0].bezier_points) == point_index[0]+point_index[1] else splines[1]
-    point = splines[0].bezier_points[0] if splines[0] == splines[1] else (splines[0].bezier_points[point_index[1]] if spline == splines[0] else splines[1].bezier_points[point_index[0]])
-    point.select_control_point = False
+    spline = splines[0] if splines[0] in bpy.context.object.data.splines.values() else splines[1]
+    point = next(point for point in spline.bezier_points if point.select_left_handle)
+    point.select_left_handle = point.select_right_handle = point.select_control_point = False
     bpy.ops.curve.delete()
-
     return spline
 
 def polygonArcAt(center, radius, begin_angle, angle, step_angle, include_ends):
