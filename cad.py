@@ -114,54 +114,34 @@ class MergeEnds(bpy.types.Operator):
     bl_description = bl_label = 'Merge Ends'
     bl_options = {'REGISTER', 'UNDO'}
 
+    max_dist: bpy.props.FloatProperty(name='Distance', description='Threshold of the maximum distance at which two controll points are merged', unit='LENGTH', min=0.0, default=0.1)
+
     @classmethod
     def poll(cls, context):
         return internal.curveObject()
 
     def execute(self, context):
-        points = []
-        selected_splines = []
-        is_last_point = []
-        for spline in bpy.context.object.data.splines:
-            if spline.type != 'BEZIER' or spline.use_cyclic_u:
+        splines = [spline for spline in internal.getSelectedSplines(True, False) if spline.use_cyclic_u == False]
+
+        while len(splines) > 0:
+            spline = splines.pop()
+            closest_pair = ([spline, spline], [spline.bezier_points[0], spline.bezier_points[-1]], [False, True])
+            min_dist = (spline.bezier_points[0].co-spline.bezier_points[-1].co).length
+            for other_spline in splines:
+                for j in range(-1, 1):
+                    for i in range(-1, 1):
+                        dist = (spline.bezier_points[i].co-other_spline.bezier_points[j].co).length
+                        if min_dist > dist:
+                            min_dist = dist
+                            closest_pair = ([spline, other_spline], [spline.bezier_points[i], other_spline.bezier_points[j]], [i == -1, j == -1])
+            if min_dist > self.max_dist:
                 continue
-            if spline.bezier_points[0].select_control_point:
-                points.append(spline.bezier_points[0])
-                selected_splines.append(spline)
-                is_last_point.append(False)
-            if spline.bezier_points[-1].select_control_point:
-                points.append(spline.bezier_points[-1])
-                selected_splines.append(spline)
-                is_last_point.append(True)
+            if closest_pair[0][0] != closest_pair[0][1]:
+                splines.remove(closest_pair[0][1])
+            spline = internal.mergeEnds(closest_pair[0], closest_pair[1], closest_pair[2])
+            if spline.use_cyclic_u == False:
+                splines.append(spline)
 
-        if len(points) != 2:
-            self.report({'WARNING'}, 'Invalid selection')
-            return {'CANCELLED'}
-
-        if is_last_point[0]:
-            points[1], points[0] = points[0], points[1]
-            selected_splines[1], selected_splines[0] = selected_splines[0], selected_splines[1]
-            is_last_point[1], is_last_point[0] = is_last_point[0], is_last_point[1]
-
-        points[0].handle_left_type = 'FREE'
-        points[0].handle_right_type = 'FREE'
-        new_co = (points[0].co+points[1].co)*0.5
-        handle = (points[1].handle_left if is_last_point[1] else points[1].handle_right)+new_co-points[1].co
-        if is_last_point[0]:
-            points[0].handle_left += new_co-points[0].co
-            points[0].handle_right = handle
-        else:
-            points[0].handle_right += new_co-points[0].co
-            points[0].handle_left = handle
-        points[0].co = new_co
-
-        point_index = 0 if selected_splines[0] == selected_splines[1] else len(selected_splines[1].bezier_points)
-        bpy.ops.curve.make_segment()
-        point = selected_splines[0].bezier_points[point_index]
-        point.select_control_point = False
-        point.select_left_handle = False
-        point.select_right_handle = False
-        bpy.ops.curve.delete()
         return {'FINISHED'}
 
 class Subdivide(bpy.types.Operator):

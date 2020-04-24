@@ -637,6 +637,37 @@ def addBezierSpline(obj, cyclic, vertices, weights=None, select=False):
             point.handle_left_type = 'VECTOR'
     return spline
 
+def mergeEnds(splines, points, is_last_point):
+    if not is_last_point[1]:
+        splines[1], splines[0] = splines[0], splines[1]
+        points[1], points[0] = points[0], points[1]
+        is_last_point[1], is_last_point[0] = is_last_point[0], is_last_point[1]
+
+    points[0].handle_left_type = 'FREE'
+    points[0].handle_right_type = 'FREE'
+    new_co = (points[0].co+points[1].co)*0.5
+    handle = (points[1].handle_left if is_last_point[1] else points[1].handle_right)+new_co-points[1].co
+    if is_last_point[0]:
+        points[0].handle_left += new_co-points[0].co
+        points[0].handle_right = handle
+    else:
+        points[0].handle_right += new_co-points[0].co
+        points[0].handle_left = handle
+    points[0].co = new_co
+
+    point_index = [len(splines[0].bezier_points), len(splines[1].bezier_points)]
+    bpy.ops.curve.select_all(action='DESELECT')
+    points[0].select_control_point = True
+    points[1].select_control_point = True
+    bpy.ops.curve.make_segment()
+    # print(is_last_point, point_index, splines[0].bezier_points, splines[1].bezier_points)
+    spline = splines[0] if len(splines[0].bezier_points) == point_index[0]+point_index[1] else splines[1]
+    point = splines[0].bezier_points[0] if splines[0] == splines[1] else (splines[0].bezier_points[point_index[1]] if spline == splines[0] else splines[1].bezier_points[point_index[0]])
+    point.select_control_point = False
+    bpy.ops.curve.delete()
+
+    return spline
+
 def polygonArcAt(center, radius, begin_angle, angle, step_angle, include_ends):
     vertices = []
     circle_samples = math.ceil(abs(angle)/step_angle)
@@ -807,7 +838,6 @@ def dogBone(spline, radius):
         vertices.append([next_segment_points[0], corner, next_segment_points[0]])
         vertices.append([corner, next_segment_points[0], next_segment_points[3]])
     iterateSpline(spline, handlePoint)
-    print(vertices)
     return vertices
 
 def discretizeCurve(spline, step_angle, samples):

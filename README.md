@@ -18,7 +18,7 @@ Adds the point, where the two rays a segments handles form come closest to each 
 This can be used to undo a fillet and thus sharpen a rounded corner.
 
 ### Merge Ends
-Merges two end control points into one while preserving the relative positions of their handles.
+Merges the end control points of the selected splines while preserving the relative positions of their handles.
 
 ### Subdivide
 Blender only allows for uniform subdivision.
